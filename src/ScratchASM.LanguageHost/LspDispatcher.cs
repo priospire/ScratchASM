@@ -11,6 +11,19 @@ public sealed class LspDispatcher
 
     public IReadOnlyList<JsonObject> Handle(JsonObject message)
     {
+        try { return HandleCore(message); }
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or System.Text.Json.JsonException or InvalidDataException)
+        {
+            return message.ContainsKey("id") ? [new JsonObject
+            {
+                ["jsonrpc"] = "2.0", ["id"] = message["id"]?.DeepClone(),
+                ["error"] = new JsonObject { ["code"] = -32602, ["message"] = ex.Message }
+            }] : [];
+        }
+    }
+
+    private IReadOnlyList<JsonObject> HandleCore(JsonObject message)
+    {
         string? method = message["method"]?.GetValue<string>();
         if (string.IsNullOrWhiteSpace(method))
         {
@@ -23,12 +36,25 @@ public sealed class LspDispatcher
             "shutdown" => [Response(message, null)],
             "textDocument/didOpen" => HandleDidOpen(message),
             "textDocument/didChange" => HandleDidChange(message),
+            "textDocument/didClose" => HandleDidClose(message),
             "textDocument/completion" => [Response(message, CompletionResult(message))],
             "textDocument/signatureHelp" => [Response(message, SignatureHelpResult(message))],
             "textDocument/documentSymbol" => [Response(message, DocumentSymbolResult(message))],
             _ when message.ContainsKey("id") => [Response(message, new JsonObject())],
             _ => []
         };
+    }
+
+    private IReadOnlyList<JsonObject> HandleDidClose(JsonObject message)
+    {
+        string? uri = message["params"]?["textDocument"]?["uri"]?.GetValue<string>();
+        if (uri is null) return [];
+        _documents.Remove(uri);
+        return [new JsonObject
+        {
+            ["jsonrpc"] = "2.0", ["method"] = "textDocument/publishDiagnostics",
+            ["params"] = new JsonObject { ["uri"] = uri, ["diagnostics"] = new JsonArray() }
+        }];
     }
 
     private IReadOnlyList<JsonObject> HandleDidOpen(JsonObject message)

@@ -1,5 +1,6 @@
 using System.IO.Compression;
 using System.Text.Json.Nodes;
+using System.Text.Json;
 
 namespace OpenCTS.Core;
 
@@ -56,7 +57,12 @@ internal static class ScratchPackageSnapshotReader
             throw new InvalidDataException("Input .sb3 does not contain project.json at the archive root.");
         }
 
-        JsonNode? parsed = JsonNode.Parse(projectBytes);
+        JsonNode? parsed;
+        try { parsed = JsonNode.Parse(projectBytes); }
+        catch (JsonException ex)
+        {
+            throw new InvalidDataException($"Improper syntax in project.json at line {ex.LineNumber + 1}, column {ex.BytePositionInLine + 1}: {ex.Message}", ex);
+        }
         if (parsed is not JsonObject project)
         {
             throw new InvalidDataException("project.json must contain a JSON object.");
@@ -75,13 +81,6 @@ internal static class ScratchPackageSnapshotReader
 
     private static bool IsSafeRootEntry(ZipArchiveEntry entry)
     {
-        string path = entry.FullName;
-        return path.Length > 0 &&
-            path == entry.Name &&
-            path != "." &&
-            path != ".." &&
-            path.IndexOfAny(Path.GetInvalidFileNameChars()) < 0 &&
-            !path.Contains('/', StringComparison.Ordinal) &&
-            !path.Contains('\\', StringComparison.Ordinal);
+        return ScratchArchivePath.IsSafe(entry.FullName);
     }
 }

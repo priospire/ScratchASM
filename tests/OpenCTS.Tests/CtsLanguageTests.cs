@@ -1053,10 +1053,12 @@ stage {
             Assert.IsTrue(result.Success, FormatIssues(result.Issues));
             using ZipArchive archive = ZipFile.OpenRead(outputPath);
             Assert.IsNotNull(archive.GetEntry("project.json"));
-            Assert.IsNotNull(archive.GetEntry("cd21514d0531fdffb22204e0ec5ed84a.svg"));
 
             using Stream projectStream = archive.GetEntry("project.json")!.Open();
             using JsonDocument projectJson = JsonDocument.Parse(projectStream);
+            JsonElement costume = projectJson.RootElement.GetProperty("targets")[0].GetProperty("costumes")[0];
+            using Stream asset = archive.GetEntry(costume.GetProperty("md5ext").GetString()!)!.Open();
+            Assert.AreEqual(costume.GetProperty("assetId").GetString(), Convert.ToHexStringLower(System.Security.Cryptography.MD5.HashData(asset)));
             JsonElement blocks = GetStageBlocks(projectJson);
             _ = FindBlockByOpcode(blocks, "event_whenflagclicked");
             _ = FindBlockByOpcode(blocks, "motion_movesteps");

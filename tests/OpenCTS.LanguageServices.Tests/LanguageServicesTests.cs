@@ -6,6 +6,20 @@ namespace OpenCTS.LanguageServices.Tests;
 public sealed class LanguageServicesTests
 {
     [TestMethod]
+    public void ProjectLoaderAcceptsSourcePathsWithoutParsingThemAsJson()
+    {
+        string directory = Directory.CreateTempSubdirectory("scratchasm-project-").FullName;
+        try
+        {
+            string source = Path.Combine(directory, "entry.sasm");
+            File.WriteAllText(source, "stage {\n}\n");
+            ScratchAsmProject project = ScratchAsmProjectLoader.Load(source);
+            Assert.AreEqual(source, project.EntryPath);
+            Assert.IsNull(project.ManifestPath);
+        }
+        finally { Directory.Delete(directory, true); }
+    }
+    [TestMethod]
     public void AnalysisReturnsVersionColorsSymbolsAndStructuredDiagnostics()
     {
         const string source = """

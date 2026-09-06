@@ -1,9 +1,22 @@
 using System.Globalization;
+using System.Text;
+using System.Text.Json;
+using System.Text.Json.Nodes;
 
 namespace OpenCTS.Core;
 
 public static class CtsParser
 {
+    private static CtsStringValue DecodeString(string literal, SourceSpan span, List<CtsDiagnostic> diagnostics)
+    {
+        try { return new CtsStringValue(JsonSerializer.Deserialize<string>(literal) ?? "", span); }
+        catch (JsonException ex)
+        {
+            AddError(diagnostics, $"Improper syntax in string escape: {ex.Message}", span);
+            return new CtsStringValue("", span);
+        }
+    }
+
     public static CtsParseResult Parse(string source)
     {
         ArgumentNullException.ThrowIfNull(source);
@@ -33,6 +46,35 @@ public static class CtsParser
                     fileDeclarations.Add(declaration);
                 }
 
+                index++;
+                continue;
+            }
+
+            if (StartsWithWord(trimmed, "project"))
+            {
+                SourceSpan span = AtLineStart(line);
+                try
+                {
+                    string? fileName = JsonSerializer.Deserialize<string>(trimmed[7..].Trim());
+                    if (string.IsNullOrWhiteSpace(fileName) || fileName != Path.GetFileName(fileName) ||
+                        fileName.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0 ||
+                        !fileName.EndsWith(".sb3", StringComparison.OrdinalIgnoreCase))
+                    {
+                        AddError(diagnostics, "Project companion must be a .sb3 filename in the source directory.", span);
+                    }
+                    else if (fileDeclarations.OfType<CtsProjectReference>().Any())
+                    {
+                        AddError(diagnostics, "Only one project companion may be declared.", span);
+                    }
+                    else
+                    {
+                        fileDeclarations.Add(new CtsProjectReference(fileName, span));
+                    }
+                }
+                catch (JsonException)
+                {
+                    AddError(diagnostics, "Expected project \"companion.assets.sb3\".", span);
+                }
                 index++;
                 continue;
             }
@@ -434,6 +476,56 @@ public static class CtsParser
         string content = StripComment(line.Text);
         string trimmed = content.Trim();
         SourceSpan memberSpan = Span(line.LineNumber, startColumn, startColumn + trimmed.Length);
+
+        if (StartsWithWord(trimmed, "origin"))
+        {
+            try
+            {
+                string? name = JsonSerializer.Deserialize<string>(trimmed[6..].Trim());
+                if (string.IsNullOrEmpty(name)) AddError(diagnostics, "Expected origin \"Original sprite name\".", memberSpan);
+                else member = new CtsTargetOriginDeclaration(name, memberSpan);
+            }
+            catch (JsonException) { AddError(diagnostics, "Expected origin \"Original sprite name\".", memberSpan); }
+            index++;
+            return true;
+        }
+
+        if (StartsWithWord(trimmed, "rawblocks"))
+        {
+            StringBuilder json = new(trimmed[9..]);
+            index++;
+            if (trimmed[9..].Trim() == "{")
+            {
+                while (index < lines.Count)
+                {
+                    SourceLine jsonLine = lines[index++];
+                    json.Append('\n').Append(jsonLine.Text);
+                    if (jsonLine.Text.Trim() == "}" && CountIndent(jsonLine.Text) == indent)
+                    {
+                        break;
+                    }
+                }
+            }
+            try
+            {
+                if (JsonNode.Parse(json.ToString()) is not JsonObject)
+                {
+                    AddError(diagnostics, "rawblocks requires a JSON object keyed by block ID.", memberSpan);
+                }
+                else
+                {
+                    member = new CtsRawBlocksDeclaration(json.ToString(), memberSpan);
+                }
+            }
+            catch (JsonException ex)
+            {
+                int errorLine = line.LineNumber + (int)(ex.LineNumber ?? 0);
+                int errorColumn = (int)(ex.BytePositionInLine ?? 0) + 1;
+                if (errorLine == line.LineNumber) errorColumn += startColumn + 8;
+                AddError(diagnostics, $"Improper syntax in rawblocks JSON: {ex.Message}", PointAt(errorLine, errorColumn));
+            }
+            return true;
+        }
 
         if (StartsWithWord(trimmed, "global"))
         {
@@ -2556,7 +2648,7 @@ public static class CtsParser
                 }
                 else if (value == '"')
                 {
-                    return new CtsStringValue(builder.ToString(), SpanFrom(start, _index));
+                    return DecodeString(_text[start.._index], SpanFrom(start, _index), _diagnostics);
                 }
                 else
                 {
@@ -2583,6 +2675,15 @@ public static class CtsParser
                 {
                     _index++;
                 }
+            }
+
+            if (!End && _text[_index] is 'e' or 'E')
+            {
+                int exponent = _index++;
+                if (!End && _text[_index] is '+' or '-') _index++;
+                int digits = _index;
+                while (!End && char.IsDigit(_text[_index])) _index++;
+                if (_index == digits) _index = exponent;
             }
 
             int numericEnd = _index;
@@ -2887,6 +2988,7 @@ public static class CtsParser
         private CtsStringValue ReadString(List<CtsDiagnostic> diagnostics)
         {
             SourceLocation startLocation = new(_line, _baseColumn + _index);
+            int startIndex = _index;
             _index++;
             StringBuilderBuilder builder = new();
             bool escaped = false;
@@ -2917,9 +3019,8 @@ public static class CtsParser
 
                 if (value == '"')
                 {
-                    return new CtsStringValue(
-                        builder.ToString(),
-                        new SourceSpan(startLocation, new SourceLocation(_line, _baseColumn + _index)));
+                    return DecodeString(_text[startIndex.._index],
+                        new SourceSpan(startLocation, new SourceLocation(_line, _baseColumn + _index)), diagnostics);
                 }
 
                 builder.Append(value);
@@ -2950,6 +3051,15 @@ public static class CtsParser
                 {
                     _index++;
                 }
+            }
+
+            if (!End && _text[_index] is 'e' or 'E')
+            {
+                int exponent = _index++;
+                if (!End && _text[_index] is '+' or '-') _index++;
+                int digits = _index;
+                while (!End && char.IsDigit(_text[_index])) _index++;
+                if (_index == digits) _index = exponent;
             }
 
             int numericEnd = _index;

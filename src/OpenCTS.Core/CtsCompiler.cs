@@ -18,17 +18,41 @@ public sealed class CtsCompileResult
 
 public static class CtsCompiler
 {
-    private const string DefaultAssetId = "cd21514d0531fdffb22204e0ec5ed84a";
-    private const string DefaultAssetFileName = DefaultAssetId + ".svg";
-
     private static readonly byte[] DefaultSvgBytes = Encoding.UTF8.GetBytes(
         "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"480\" height=\"360\" viewBox=\"0 0 480 360\"><rect width=\"480\" height=\"360\" fill=\"#ffffff\"/></svg>");
+    private static readonly string DefaultAssetId = Convert.ToHexStringLower(MD5.HashData(DefaultSvgBytes));
+    private static readonly string DefaultAssetFileName = DefaultAssetId + ".svg";
 
     public static CtsCompileResult Compile(string source, string? sourceName = null)
     {
+        ArgumentNullException.ThrowIfNull(source);
+        if (source.Length > 8 * 1024 * 1024)
+        {
+            return LimitError("Source exceeds the 8 MiB supported size limit.");
+        }
+        int nesting = 0;
+        foreach (CtsToken token in CtsLexer.Lex(source))
+        {
+            if (token.Text is "(" or "[" or "{") nesting++;
+            if (token.Text is ")" or "]" or "}") nesting--;
+            if (nesting > 128) return LimitError("Source nesting exceeds the supported limit of 128.");
+        }
         CtsProjectBuilder builder = new(sourceName);
-        return builder.Compile(source);
+        try
+        {
+            return builder.Compile(source);
+        }
+        catch (Exception ex) when (ex is OverflowException or FormatException or JsonException or InvalidOperationException)
+        {
+            return LimitError($"Improper syntax: {ex.Message}");
+        }
     }
+
+    private static CtsCompileResult LimitError(string message) => new()
+    {
+        Diagnostics = [new CtsDiagnostic("CTS1030", DiagnosticSeverity.Error, message,
+            new SourceSpan(new SourceLocation(1, 1), new SourceLocation(1, 1)))]
+    };
 
     internal static IReadOnlyDictionary<string, byte[]> CreateDefaultAssets()
     {
@@ -181,6 +205,33 @@ public static class CtsCompiler
                 }
 
                 scriptIndex++;
+            }
+
+            foreach (CtsRawBlocksDeclaration raw in target.Members.OfType<CtsRawBlocksDeclaration>())
+            {
+                foreach ((string id, JsonNode? block) in JsonNode.Parse(raw.Json)!.AsObject())
+                {
+                    if (_currentBlocks.ContainsKey(id))
+                        AddError("CTS1031", $"Duplicate raw block ID '{id}'.", raw.Span);
+                    else
+                        _currentBlocks[id] = block?.DeepClone();
+                }
+            }
+
+            if (target.Members.OfType<CtsRawBlocksDeclaration>().FirstOrDefault() is CtsRawBlocksDeclaration rawSource)
+            {
+                using JsonDocument rawDocument = JsonDocument.Parse(_currentBlocks.ToJsonString());
+                List<ValidationIssue> issues = [];
+                ScratchProjectValidator.ValidateBlocks(rawDocument.RootElement, "$", JsonSourceMap.Empty, issues);
+                foreach (ValidationIssue issue in issues)
+                {
+                    CtsRawBlocksDeclaration owner = target.Members.OfType<CtsRawBlocksDeclaration>().FirstOrDefault(raw =>
+                        JsonNode.Parse(raw.Json)!.AsObject().ContainsKey(issue.JsonPath[2..])) ?? rawSource;
+                    SourceLocation location = JsonSourceMap.Create(Encoding.UTF8.GetBytes(owner.Json)).GetLocation(issue.JsonPath) ?? new SourceLocation(1, 1);
+                    SourceLocation start = new(owner.Span.Start.Line + location.Line - 1,
+                        location.Column + (location.Line == 1 ? owner.Span.Start.Column + 8 : 0));
+                    _diagnostics.Add(new CtsDiagnostic(issue.Code ?? "CTS1031", issue.Severity, issue.Message, new SourceSpan(start, start)));
+                }
             }
 
             return target.IsStage

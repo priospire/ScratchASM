@@ -1,10 +1,12 @@
 ﻿# ScratchASM Language Reference
 
-ScratchASM is OpenCTS's Scratch source language. ScratchASM source files use `.sasm`. Legacy `.mono` files are still accepted for compatibility.
+ScratchASM is a source language for Scratch. Source files use `.sasm`; legacy `.mono` and `.cts` files are also accepted.
 
 ScratchASM compiles to Scratch 3 `project.json`, validates the generated project, and packages the result as `.sb3`. Scratch stores costumes and sounds as assets, not as executable block code. ScratchASM costume drawing tools therefore generate SVG files, add them to the `.sb3`, and reference them from costume metadata.
 
 The minimal forms are `score = 5`, `score += 3`, `repeat 10:`, `forever:`, category commands such as `motion.move 10`, and expressions such as `(score + 2) * 3`. Generic Scratch opcode syntax remains available for exact interoperability.
+
+For importing existing projects, the complete specification of `project`, `origin`, and `rawblocks`, companion assets, and preservation rules is in [Scratch project round trips](round-trips.md). These forms extend the declarations below and are supported by the IDE, CLI, and language services. Standard JSON string escapes, including `\uXXXX`, and scientific-notation numbers such as `1e-4` are accepted.
 
 ## Complete Alias Set
 
@@ -709,7 +711,7 @@ For example, `pen.stamp` emits the Scratch Pen stamp block and registers `pen`. 
 
 ### Coverage Boundary
 
-ScratchASM native and generic syntax represents Scratch block JSON: opcodes, nested inputs, fields and IDs, mutations, shadow blocks, top-level hats, next/parent links, and one or more substacks. The compiler also generates SVG costume assets. Existing bitmap costumes, sound assets, comments, and monitor records are not encoded as ScratchASM declarations; use `project.json`, a project folder, or an existing `.sb3` when those exact assets or records must be preserved.
+ScratchASM native and generic syntax represents Scratch block JSON: opcodes, nested inputs, fields and IDs, mutations, shadow blocks, top-level hats, next/parent links, and one or more substacks. The compiler also generates SVG costume assets. Imported bitmap costumes, sounds, comments, and monitors are retained in an adjacent project companion referenced by the `project` directive. Use the converter's `.sb3` to `.sasm` export to create portable source with these records intact. Complex graphs use `rawblocks` JSON instead of a lossy alias conversion.
 
 Arbitrary third-party extension blocks are preserved when converting an existing valid `.sb3`, but are not rewritten to vanilla blocks unless an exact semantic equivalent exists. No general conversion is attempted because extension behavior and external state are not encoded well enough for a reliable transformation. ScratchASM's literal `^` lowering is an example of a reliable vanilla workaround implemented by the compiler.
 
@@ -787,7 +789,9 @@ Malformed JSON, unreadable ZIP data, unsafe ZIP paths, unknown semantics, and so
 
 ## IDE And VS Code
 
-The Windows executable opens as a ScratchASM IDE when launched without CLI arguments. It supports file/folder browsing, `.sb3` decompile-to-edit display, source editing, Scratch-category color coding, warning/error diagnostics, double-click navigation from diagnostics to source, a dark/light mode toggle, compile, repair, and save-source actions.
+The Windows executable opens as a ScratchASM IDE when launched without CLI arguments. It supports file/folder browsing, typed paths, file drag-and-drop, `.sb3` import, source editing, Scratch-category colors, live diagnostics, a project outline, line numbers, search, undo/redo, resizable panes, persistent dark/light themes, export, repair, and portable source saving. Unsaved edits are protected when switching documents or closing.
+
+Keyboard commands: Ctrl+N new, Ctrl+O open, Ctrl+S save, Ctrl+Shift+S save as, Ctrl+F search, F3 next match, Shift+F3 previous match, Ctrl+Z undo, Ctrl+Y redo, and F5 export `.sb3`. Double-click a diagnostic or outline entry to navigate to its source. Tabs insert two spaces; Enter retains indentation.
 
 The VS Code extension is in `editors/vscode-scratchasm`. It contributes `.sasm` and `.mono` language IDs, Scratch-colored TextMate scopes, dark/light ScratchASM themes, diagnostics, and completions through `ScratchASM.LanguageHost`. If the extension cannot find the host build output, set `scratchasm.languageHostPath` to `ScratchASM.LanguageHost.exe` or `ScratchASM.LanguageHost.dll`.
 
@@ -799,7 +803,7 @@ MCP tools:
 
 - `analyze_source`: returns diagnostics, symbols, and color spans.
 - `compile_to_sb3`: compiles any supported input to `.sb3`.
-- `decompile_sb3`: returns display/editable ScratchASM source from an `.sb3`.
+- `decompile_sb3`: returns editable ScratchASM from an `.sb3`; optional `output` writes a portable `.sasm` file and companion. `overwrite` defaults to false for this export.
 - `merge_edited_source`: merges edited ScratchASM source into a baseline `.sb3`.
 - `repair_input`: attempts safe repair for any supported input and writes a repaired `.sb3` when possible.
 - `lookup_catalog`: searches aliases, opcodes, categories, shapes, colors, and bindings.

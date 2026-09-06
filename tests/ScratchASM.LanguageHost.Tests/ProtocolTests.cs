@@ -9,6 +9,40 @@ namespace ScratchASM.LanguageHost.Tests;
 public sealed class ProtocolTests
 {
     [TestMethod]
+    public void MalformedProtocolParametersDoNotCrashDispatchers()
+    {
+        JsonObject response = new LspDispatcher().Handle(new JsonObject { ["id"] = 1, ["method"] = 7 }).Single();
+        Assert.AreEqual(-32602, response["error"]!["code"]!.GetValue<int>());
+        string root = CreateTemporaryDirectory();
+        try
+        {
+            JsonObject result = new McpDispatcher(root).Handle(new JsonObject { ["id"] = 1, ["method"] = true })!;
+            Assert.AreEqual(-32602, result["error"]!["code"]!.GetValue<int>());
+        }
+        finally { Directory.Delete(root, true); }
+    }
+
+    [TestMethod]
+    public void McpExportsPortableSourceThatCanBeRecompiled()
+    {
+        string root = CreateTemporaryDirectory();
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "main.sasm"), "stage {\n  var score = 1\n}\n");
+            McpDispatcher dispatcher = new(root);
+            JsonObject Call(string name, string input, string output) => dispatcher.Handle(Request(1, "tools/call", new JsonObject
+            {
+                ["name"] = name, ["arguments"] = new JsonObject { ["path"] = input, ["output"] = output }
+            }))!;
+            Assert.IsFalse(Call("compile_to_sb3", "main.sasm", "original.sb3")["result"]!["isError"]!.GetValue<bool>());
+            Assert.IsFalse(Call("decompile_sb3", "original.sb3", "exported.sasm")["result"]!["isError"]!.GetValue<bool>());
+            File.Delete(Path.Combine(root, "original.sb3"));
+            Assert.IsFalse(Call("compile_to_sb3", "exported.sasm", "rebuilt.sb3")["result"]!["isError"]!.GetValue<bool>());
+        }
+        finally { Directory.Delete(root, true); }
+    }
+
+    [TestMethod]
     public void LspInitializesAndPublishesScratchAsmDiagnosticsAndCompletions()
     {
         LspDispatcher dispatcher = new();

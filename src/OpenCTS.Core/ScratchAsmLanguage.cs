@@ -8,7 +8,7 @@ public static class ScratchAsmLanguage
 
     public static bool IsSupportedSourceName(string? sourceName)
     {
-        return HasExtension(sourceName, CanonicalExtension) || HasExtension(sourceName, CompatibilityExtension);
+        return HasExtension(sourceName, CanonicalExtension) || HasExtension(sourceName, CompatibilityExtension) || HasExtension(sourceName, ".cts");
     }
 
     public static bool IsCanonicalSourceName(string? sourceName)

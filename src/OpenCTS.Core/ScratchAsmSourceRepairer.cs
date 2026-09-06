@@ -46,10 +46,41 @@ public static class ScratchAsmSourceRepairer
         bool changedTabs = false;
         bool changedQuotes = false;
         bool changedSpaces = false;
+        bool inString = false;
+        bool smartString = false;
+        bool escaped = false;
+        bool inComment = false;
 
         for (int i = 0; i < source.Length; i++)
         {
             char character = source[i];
+            if (inComment)
+            {
+                builder.Append(character);
+                if (character == '\n') inComment = false;
+                continue;
+            }
+            if (inString)
+            {
+                if (!escaped && smartString && character == '\u201D')
+                {
+                    builder.Append('"');
+                    inString = false;
+                    smartString = false;
+                    changedQuotes = true;
+                    continue;
+                }
+                builder.Append(character);
+                if (!escaped && character == '"') inString = false;
+                escaped = !escaped && character == '\\';
+                continue;
+            }
+            if (character == '#') { inComment = true; builder.Append(character); continue; }
+            if (character == '"') { inString = true; builder.Append(character); continue; }
+            if (character == '\u201C')
+            {
+                builder.Append('"'); inString = true; smartString = true; changedQuotes = true; continue;
+            }
             switch (character)
             {
                 case '\t':

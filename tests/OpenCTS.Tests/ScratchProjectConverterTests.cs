@@ -81,20 +81,17 @@ stage {
     }
 
     [TestMethod]
-    public void CtsExtensionIsRejectedAsUnsupported()
+    public void CtsExtensionIsAcceptedAsLegacyScratchAsm()
     {
-        string inputPath = WriteTempSource(".cts", "stage {}");
+        string inputPath = WriteTempSource(".cts", "stage {\n}\n");
         string outputPath = TempSb3Path();
 
         try
         {
             ConversionResult result = new ScratchProjectConverter().ConvertToSb3(inputPath, outputPath);
 
-            Assert.IsFalse(result.Success);
-            Assert.AreEqual(
-            "Input must be a .sasm/.mono source file, a .sb3 file, a project.json file, or a folder containing project.json.",
-                AssertSingleIssue(result).Message);
-            Assert.IsFalse(File.Exists(outputPath));
+            Assert.IsTrue(result.Success);
+            Assert.IsTrue(File.Exists(outputPath));
         }
         finally
         {
@@ -345,7 +342,7 @@ stage {
     {
         string inputPath = CreateSb3WithEntries(
             ("project.json", "{}"),
-            ("assets/unsafe.svg", "<svg xmlns=\"http://www.w3.org/2000/svg\"/>"));
+            ("../unsafe.svg", "<svg xmlns=\"http://www.w3.org/2000/svg\"/>"));
         string outputPath = TempSb3Path();
 
         try

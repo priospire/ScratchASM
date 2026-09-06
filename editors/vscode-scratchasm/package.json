@@ -1,8 +1,8 @@
 {
   "name": "scratchasm",
   "displayName": "ScratchASM",
-  "description": "ScratchASM language support for OpenCTS Scratch projects.",
-  "version": "0.2.0",
+  "description": "ScratchASM syntax, diagnostics, and completions for Scratch 3 projects.",
+  "version": "0.3.0",
   "publisher": "opencts",
   "engines": {
     "vscode": "^1.90.0"
@@ -26,7 +26,8 @@
         ],
         "extensions": [
           ".sasm",
-          ".mono"
+          ".mono",
+          ".cts"
         ],
         "configuration": "./language-configuration.json"
       }
@@ -66,5 +67,12 @@
         }
       }
     }
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/priospire/ScratchASM.git"
+  },
+  "scripts": {
+    "test": "node --test client.test.cjs"
   }
 }

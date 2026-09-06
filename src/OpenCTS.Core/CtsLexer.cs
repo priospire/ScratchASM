@@ -25,6 +25,9 @@ public static class CtsLexer
     private static readonly HashSet<string> Keywords = new(StringComparer.Ordinal)
     {
         "stage",
+        "project",
+        "rawblocks",
+        "origin",
         "sprite",
         "const",
         "enum",

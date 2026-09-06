@@ -5,6 +5,19 @@ namespace OpenCTS.Core;
 
 public sealed class ScratchProjectConverter
 {
+    public ConversionResult ConvertToScratchAsm(string inputPath, string outputPath, bool overwrite = false)
+    {
+        try
+        {
+            ScratchProjectEditSession session = ScratchProjectEditSession.Open(inputPath);
+            return session.SaveSource(session.SourceText, outputPath, overwrite);
+        }
+        catch (Exception ex) when (ex is IOException or InvalidDataException or UnauthorizedAccessException or ArgumentException or NotSupportedException or JsonException or InvalidOperationException)
+        {
+            return Failure([new ValidationIssue($"Could not import project: {ex.Message}", "$", null)]);
+        }
+    }
+
     public ConversionResult ConvertToSb3(string inputPath, string outputPath, ConversionOptions? options = null)
     {
         options ??= new ConversionOptions();
@@ -140,7 +153,7 @@ public sealed class ScratchProjectConverter
 
             return Failure([CreateSyntaxIssue(ex)]);
         }
-        catch (Exception ex) when (ex is IOException or InvalidDataException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
+        catch (Exception ex) when (ex is IOException or InvalidDataException or UnauthorizedAccessException or ArgumentException or NotSupportedException or InvalidOperationException)
         {
             return Failure([new ValidationIssue(ex.Message, "$", null)]);
         }
@@ -169,6 +182,13 @@ public sealed class ScratchProjectConverter
         if (issues.Any(static issue => issue.Severity == DiagnosticSeverity.Error))
         {
             return Failure(issues);
+        }
+
+        ScratchProjectEditSession? companion = ScratchProjectEditSession.OpenSourceCompanion(sourceText, fullInputPath);
+        if (companion is not null)
+        {
+            ConversionResult merged = companion.WriteEdited(sourceText, fullOutputPath, options.Overwrite);
+            return new ConversionResult { Success = merged.Success, OutputPath = merged.OutputPath, Issues = [.. issues, .. merged.Issues] };
         }
 
         using ScratchInputPackage package = ScratchInputPackage.FromGenerated(

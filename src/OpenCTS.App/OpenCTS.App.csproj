@@ -2,6 +2,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\OpenCTS.Core\OpenCTS.Core.csproj" />
+    <ProjectReference Include="..\OpenCTS.LanguageServices\OpenCTS.LanguageServices.csproj" />
   </ItemGroup>
 
   <PropertyGroup>

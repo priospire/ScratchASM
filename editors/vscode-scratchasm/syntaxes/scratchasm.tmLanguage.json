@@ -3,16 +3,39 @@
   "name": "ScratchASM",
   "scopeName": "source.scratchasm",
   "patterns": [
-    { "include": "#comments" },
-    { "include": "#strings" },
-    { "include": "#numbers" },
-    { "include": "#hats" },
-    { "include": "#declarations" },
-    { "include": "#control" },
-    { "include": "#operators" },
-    { "include": "#categories" },
-    { "include": "#raw" },
-    { "include": "#punctuation" }
+    {
+      "include": "#comments"
+    },
+    {
+      "include": "#raw-opcodes"
+    },
+    {
+      "include": "#strings"
+    },
+    {
+      "include": "#numbers"
+    },
+    {
+      "include": "#hats"
+    },
+    {
+      "include": "#declarations"
+    },
+    {
+      "include": "#control"
+    },
+    {
+      "include": "#operators"
+    },
+    {
+      "include": "#categories"
+    },
+    {
+      "include": "#raw"
+    },
+    {
+      "include": "#punctuation"
+    }
   ],
   "repository": {
     "comments": {
@@ -109,24 +132,57 @@
     },
     "categories": {
       "patterns": [
-        { "name": "entity.name.function.motion.scratchasm", "match": "\\bmotion\\.[A-Za-z0-9_.-]+\\b" },
-        { "name": "entity.name.function.looks.scratchasm", "match": "\\blooks\\.[A-Za-z0-9_.-]+\\b" },
-        { "name": "entity.name.function.sound.scratchasm", "match": "\\bsound\\.[A-Za-z0-9_.-]+\\b" },
-        { "name": "entity.name.function.events.scratchasm", "match": "\\b(?:event|broadcast)\\.[A-Za-z0-9_.-]+\\b" },
-        { "name": "entity.name.function.control.scratchasm", "match": "\\bcontrol\\.[A-Za-z0-9_.-]+\\b" },
-        { "name": "entity.name.function.sensing.scratchasm", "match": "\\bsensing\\.[A-Za-z0-9_.-]+\\b" },
-        { "name": "entity.name.function.operators.scratchasm", "match": "\\boperator\\.[A-Za-z0-9_.-]+\\b" },
-        { "name": "entity.name.function.variables.scratchasm", "match": "\\bdata\\.[A-Za-z0-9_.-]+\\b" },
-        { "name": "entity.name.function.lists.scratchasm", "match": "\\blist\\.[A-Za-z0-9_.-]+\\b" },
-        { "name": "entity.name.function.myblocks.scratchasm", "match": "\\bprocedures\\.[A-Za-z0-9_.-]+\\b" },
-        { "name": "entity.name.function.extensions.scratchasm", "match": "\\b(?:pen|music|videoSensing|text2speech|translate|speech2text|faceSensing|makeymakey|microbit|ev3|wedo2|gdxfor|boost)\\.[A-Za-z0-9_.-]+\\b" }
+        {
+          "name": "entity.name.function.motion.scratchasm",
+          "match": "\\bmotion\\.[A-Za-z0-9_.-]+\\b"
+        },
+        {
+          "name": "entity.name.function.looks.scratchasm",
+          "match": "\\blooks\\.[A-Za-z0-9_.-]+\\b"
+        },
+        {
+          "name": "entity.name.function.sound.scratchasm",
+          "match": "\\bsound\\.[A-Za-z0-9_.-]+\\b"
+        },
+        {
+          "name": "entity.name.function.events.scratchasm",
+          "match": "\\b(?:event|broadcast)\\.[A-Za-z0-9_.-]+\\b"
+        },
+        {
+          "name": "entity.name.function.control.scratchasm",
+          "match": "\\bcontrol\\.[A-Za-z0-9_.-]+\\b"
+        },
+        {
+          "name": "entity.name.function.sensing.scratchasm",
+          "match": "\\bsensing\\.[A-Za-z0-9_.-]+\\b"
+        },
+        {
+          "name": "entity.name.function.operators.scratchasm",
+          "match": "\\boperator\\.[A-Za-z0-9_.-]+\\b"
+        },
+        {
+          "name": "entity.name.function.variables.scratchasm",
+          "match": "\\bdata\\.[A-Za-z0-9_.-]+\\b"
+        },
+        {
+          "name": "entity.name.function.lists.scratchasm",
+          "match": "\\blist\\.[A-Za-z0-9_.-]+\\b"
+        },
+        {
+          "name": "entity.name.function.myblocks.scratchasm",
+          "match": "\\bprocedures\\.[A-Za-z0-9_.-]+\\b"
+        },
+        {
+          "name": "entity.name.function.extensions.scratchasm",
+          "match": "\\b(?:pen|music|videoSensing|text2speech|translate|speech2text|faceSensing|makeymakey|microbit|ev3|wedo2|gdxfor|boost)\\.[A-Za-z0-9_.-]+\\b"
+        }
       ]
     },
     "raw": {
       "patterns": [
         {
           "name": "keyword.other.raw.scratchasm",
-          "match": "\\b(?:block|input|field|mutation)\\b"
+          "match": "\\b(?:block|rawblocks|project|origin|stage|sprite|input|field|mutation)\\b"
         }
       ]
     },
@@ -135,6 +191,90 @@
         {
           "name": "punctuation.section.braces.scratchasm",
           "match": "[{}()[\\],:]"
+        }
+      ]
+    },
+    "raw-opcodes": {
+      "patterns": [
+        {
+          "match": "\"opcode\"\\s*:\\s*\"((?:motion)_[^\"]+)\"",
+          "captures": {
+            "1": {
+              "name": "entity.name.function.motion.scratchasm"
+            }
+          }
+        },
+        {
+          "match": "\"opcode\"\\s*:\\s*\"((?:looks)_[^\"]+)\"",
+          "captures": {
+            "1": {
+              "name": "entity.name.function.looks.scratchasm"
+            }
+          }
+        },
+        {
+          "match": "\"opcode\"\\s*:\\s*\"((?:sound)_[^\"]+)\"",
+          "captures": {
+            "1": {
+              "name": "entity.name.function.sound.scratchasm"
+            }
+          }
+        },
+        {
+          "match": "\"opcode\"\\s*:\\s*\"((?:event)_[^\"]+)\"",
+          "captures": {
+            "1": {
+              "name": "entity.name.function.events.scratchasm"
+            }
+          }
+        },
+        {
+          "match": "\"opcode\"\\s*:\\s*\"((?:control)_[^\"]+)\"",
+          "captures": {
+            "1": {
+              "name": "entity.name.function.control.scratchasm"
+            }
+          }
+        },
+        {
+          "match": "\"opcode\"\\s*:\\s*\"((?:sensing)_[^\"]+)\"",
+          "captures": {
+            "1": {
+              "name": "entity.name.function.sensing.scratchasm"
+            }
+          }
+        },
+        {
+          "match": "\"opcode\"\\s*:\\s*\"((?:operator)_[^\"]+)\"",
+          "captures": {
+            "1": {
+              "name": "entity.name.function.operators.scratchasm"
+            }
+          }
+        },
+        {
+          "match": "\"opcode\"\\s*:\\s*\"((?:data)_[^\"]+)\"",
+          "captures": {
+            "1": {
+              "name": "entity.name.function.variables.scratchasm"
+            }
+          }
+        },
+        {
+          "match": "\"opcode\"\\s*:\\s*\"((?:procedures|argument)_[^\"]+)\"",
+          "captures": {
+            "1": {
+              "name": "entity.name.function.myblocks.scratchasm"
+            }
+          }
+        },
+        {
+          "match": "\"opcode\"\\s*:\\s*\"((?:pen|music|videoSensing|text2speech|translate|microbit|ev3|wedo2|gdxfor|boost)_[^\"]+)\"",
+          "captures": {
+            "1": {
+              "name": "entity.name.function.extensions.scratchasm"
+            }
+          }
         }
       ]
     }

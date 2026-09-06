@@ -11,12 +11,14 @@ Scratch stores artwork as assets, not as block code. When ScratchASM costume dra
 
 ## Supported Source Forms
 
-OpenCTS accepts these equivalent source forms:
+ScratchASM accepts these source forms:
 
 - A ready-made `.sb3` zip.
 - A folder containing `project.json` and asset files.
 - A `project.json` file with asset files in the same folder.
-- A ScratchASM `.sasm` source file, or legacy `.mono` file, which OpenCTS compiles to `project.json` plus generated assets.
+- A ScratchASM `.sasm` source file, or legacy `.mono` / `.cts` file, compiled to `project.json` plus assets.
+
+Existing archives can also be exported as portable ScratchASM source; see [round-trip conversion](round-trips.md).
 
 Folder example:
 
@@ -28,7 +30,7 @@ my-project/
 
 ## Required Top-Level JSON Shape
 
-`project.json` must be a JSON object with these Scratch fields:
+`project.json` is a JSON object with this standard shape. `monitors` and `extensions` may be omitted in existing projects; when present they must be arrays.
 
 ```json
 {

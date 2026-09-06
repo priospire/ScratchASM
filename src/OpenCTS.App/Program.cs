@@ -8,13 +8,13 @@ static class Program
     [STAThread]
     static int Main(string[] args)
     {
-        if (args.Length > 0)
+        if (args.Length > 0 && !(args.Length == 2 && args[0] == "--open"))
         {
             return RunCli(args);
         }
 
         ApplicationConfiguration.Initialize();
-        Application.Run(new MainForm());
+        Application.Run(new MainForm(args.Length == 2 ? args[1] : null));
         return 0;
     }
 
@@ -52,6 +52,10 @@ static class Program
             }
         }
 
+        bool overwrite = args.Contains("--overwrite", StringComparer.OrdinalIgnoreCase);
+        args = args.Where(arg => !arg.Equals("--overwrite", StringComparison.OrdinalIgnoreCase)).ToArray();
+        bool decompile = args.Length == 3 && args[0].Equals("--decompile", StringComparison.OrdinalIgnoreCase);
+        if (decompile) args = args[1..];
         bool hasRepairSwitch = args.Length > 0 &&
             string.Equals(args[0], "--repair", StringComparison.OrdinalIgnoreCase);
         bool attemptSafeRepair = args.Length == 3 && hasRepairSwitch;
@@ -61,15 +65,17 @@ static class Program
             Console.Error.WriteLine("Usage: ScratchASM <input .sasm|.mono|.sb3|project.json|folder> <output.sb3>");
             Console.Error.WriteLine("       ScratchASM --repair <input .sasm|.mono|.sb3|project.json|folder> <output.sb3>");
             Console.Error.WriteLine("       ScratchASM --emit-aliases <output-folder>");
+            Console.Error.WriteLine("       ScratchASM [--decompile] <input.sb3> <output.sasm> [--overwrite]");
+            Console.Error.WriteLine("       ScratchASM --open <input.sasm|input.sb3>");
             return 2;
         }
 
         string inputPath = attemptSafeRepair ? args[1] : args[0];
         string outputPath = attemptSafeRepair ? args[2] : args[1];
-        ConversionOptions? options = attemptSafeRepair
-            ? new ConversionOptions { AttemptSafeRepair = true }
-            : null;
-        ConversionResult result = new ScratchProjectConverter().ConvertToSb3(inputPath, outputPath, options);
+        ConversionOptions options = new() { AttemptSafeRepair = attemptSafeRepair, Overwrite = overwrite };
+        ConversionResult result = decompile || Path.GetExtension(outputPath).Equals(".sasm", StringComparison.OrdinalIgnoreCase)
+            ? new ScratchProjectConverter().ConvertToScratchAsm(inputPath, outputPath, overwrite)
+            : new ScratchProjectConverter().ConvertToSb3(inputPath, outputPath, options);
         if (result.Success)
         {
             Console.WriteLine($"Wrote {result.OutputPath}");

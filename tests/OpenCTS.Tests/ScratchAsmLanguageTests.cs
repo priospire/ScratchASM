@@ -14,7 +14,7 @@ public sealed class ScratchAsmLanguageTests
         Assert.AreEqual(".mono", GetPublicConstant(nameof(ScratchAsmLanguage.CompatibilityExtension)));
         Assert.IsTrue(ScratchAsmLanguage.IsSupportedSourceName("game.sasm"));
         Assert.IsTrue(ScratchAsmLanguage.IsSupportedSourceName("GAME.MONO"));
-        Assert.IsFalse(ScratchAsmLanguage.IsSupportedSourceName("game.cts"));
+        Assert.IsTrue(ScratchAsmLanguage.IsSupportedSourceName("game.cts"));
     }
 
     private static string GetPublicConstant(string name)

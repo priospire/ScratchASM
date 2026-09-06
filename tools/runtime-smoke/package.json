@@ -1,0 +1,10 @@
+{
+  "name": "scratchasm-runtime-smoke",
+  "private": true,
+  "scripts": { "test": "node smoke.cjs", "test:fixtures": "node fixtures.cjs" },
+  "dependencies": {
+    "@scratch/scratch-vm": "15.1.1",
+    "scratch-storage": "6.2.1",
+    "jszip": "3.10.1"
+  }
+}

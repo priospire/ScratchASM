@@ -20,6 +20,19 @@ public sealed class McpDispatcher
 
     public JsonObject? Handle(JsonObject request)
     {
+        try { return HandleCore(request); }
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or JsonException)
+        {
+            return new JsonObject
+            {
+                ["jsonrpc"] = "2.0", ["id"] = request["id"]?.DeepClone(),
+                ["error"] = new JsonObject { ["code"] = -32602, ["message"] = ex.Message }
+            };
+        }
+    }
+
+    private JsonObject? HandleCore(JsonObject request)
+    {
         string? method = request["method"]?.GetValue<string>();
         if (string.IsNullOrWhiteSpace(method))
         {
@@ -132,6 +145,9 @@ public sealed class McpDispatcher
     private JsonObject DecompileSb3(JsonObject arguments)
     {
         string path = ResolveRequiredPath(arguments, "path");
+        if (arguments["output"] is not null)
+            return ConversionToolResult(_converter.ConvertToScratchAsm(path, ResolveRequiredPath(arguments, "output"),
+                arguments["overwrite"]?.GetValue<bool>() ?? false));
         ScratchProjectEditSession session = ScratchProjectEditSession.Open(path);
         return ToolText(session.SourceText, session.Issues.Any(static issue => issue.Severity == DiagnosticSeverity.Error));
     }
@@ -231,7 +247,7 @@ public sealed class McpDispatcher
         [
             Tool("analyze_source", "Analyze ScratchASM source and return diagnostics, symbols, and color spans."),
             Tool("compile_to_sb3", "Compile a ScratchASM, .sb3, project.json, or project folder input to a Scratch-readable .sb3."),
-            Tool("decompile_sb3", "Decompile a .sb3 archive to editable ScratchASM source for display or editing."),
+            Tool("decompile_sb3", "Decompile a .sb3 archive to editable ScratchASM. Optional output writes portable .sasm source and its project companion."),
             Tool("merge_edited_source", "Merge edited ScratchASM source back into an existing .sb3 while preserving unknown assets and JSON."),
             Tool("repair_input", "Attempt safe repair for any supported input and write a repaired .sb3 when possible."),
             Tool("lookup_catalog", "Search the ScratchASM alias catalog by alias, opcode, category, or shape."),
@@ -248,7 +264,13 @@ public sealed class McpDispatcher
             ["inputSchema"] = new JsonObject
             {
                 ["type"] = "object",
-                ["additionalProperties"] = true
+                ["additionalProperties"] = true,
+                ["properties"] = name == "decompile_sb3" ? new JsonObject
+                {
+                    ["path"] = new JsonObject { ["type"] = "string", ["description"] = "Workspace-relative input .sb3 path." },
+                    ["output"] = new JsonObject { ["type"] = "string", ["description"] = "Optional workspace-relative .sasm output path." },
+                    ["overwrite"] = new JsonObject { ["type"] = "boolean", ["default"] = false }
+                } : new JsonObject()
             }
         };
     }

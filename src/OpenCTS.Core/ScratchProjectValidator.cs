@@ -21,13 +21,63 @@ internal static class ScratchProjectValidator
         if (RequireProperty(root, "targets", JsonValueKind.Array, "$", sourceMap, issues, out JsonElement targets))
         {
             ValidateTargets(targets, sourceMap, package, issues, assetReferences);
+            ValidateDataReferences(targets, sourceMap, issues);
         }
 
-        RequireProperty(root, "monitors", JsonValueKind.Array, "$", sourceMap, issues, out _);
-        RequireProperty(root, "extensions", JsonValueKind.Array, "$", sourceMap, issues, out _);
+        if (root.TryGetProperty("monitors", out _)) RequireProperty(root, "monitors", JsonValueKind.Array, "$", sourceMap, issues, out _);
+        if (root.TryGetProperty("extensions", out _)) RequireProperty(root, "extensions", JsonValueKind.Array, "$", sourceMap, issues, out _);
         RequireProperty(root, "meta", JsonValueKind.Object, "$", sourceMap, issues, out _);
 
         return assetReferences;
+    }
+
+    private static void ValidateDataReferences(JsonElement targets, JsonSourceMap map, List<ValidationIssue> issues)
+    {
+        JsonElement stage = targets.EnumerateArray().FirstOrDefault(target => target.ValueKind == JsonValueKind.Object &&
+            target.TryGetProperty("isStage", out JsonElement flag) && flag.ValueKind == JsonValueKind.True);
+        HashSet<string> DataIds(JsonElement target, string kind) => target.ValueKind == JsonValueKind.Object &&
+            target.TryGetProperty(kind, out JsonElement data) && data.ValueKind == JsonValueKind.Object
+                ? data.EnumerateObject().Select(item => item.Name).ToHashSet(StringComparer.Ordinal) : [];
+        int index = 0;
+        foreach (JsonElement target in targets.EnumerateArray())
+        {
+            string prefix = $"$.targets[{index++}].blocks";
+            if (target.ValueKind != JsonValueKind.Object || !target.TryGetProperty("blocks", out JsonElement blocks) || blocks.ValueKind != JsonValueKind.Object) continue;
+            HashSet<string> variables = DataIds(stage, "variables");
+            variables.UnionWith(DataIds(target, "variables"));
+            HashSet<string> lists = DataIds(stage, "lists");
+            lists.UnionWith(DataIds(target, "lists"));
+            foreach (JsonProperty block in blocks.EnumerateObject())
+            {
+                string path = prefix + "." + block.Name;
+                if (block.Value.ValueKind == JsonValueKind.Array) { CheckPrimitive(block.Value, path); continue; }
+                if (block.Value.ValueKind != JsonValueKind.Object) continue;
+                if (block.Value.TryGetProperty("opcode", out JsonElement opcode) && opcode.ValueKind == JsonValueKind.String &&
+                    opcode.GetString()!.StartsWith("data_", StringComparison.Ordinal) &&
+                    block.Value.TryGetProperty("fields", out JsonElement fields) && fields.ValueKind == JsonValueKind.Object)
+                {
+                    foreach (JsonProperty field in fields.EnumerateObject())
+                        if (field.Name is "VARIABLE" or "LIST" && field.Value.ValueKind == JsonValueKind.Array &&
+                            field.Value.GetArrayLength() >= 2 && field.Value[1].ValueKind == JsonValueKind.String)
+                            Check(field.Value[1].GetString()!, field.Name == "LIST", path + ".fields." + field.Name);
+                }
+                if (block.Value.TryGetProperty("inputs", out JsonElement inputs) && inputs.ValueKind == JsonValueKind.Object)
+                    foreach (JsonProperty input in inputs.EnumerateObject())
+                        if (input.Value.ValueKind == JsonValueKind.Array)
+                            foreach (JsonElement value in input.Value.EnumerateArray().Skip(1)) CheckPrimitive(value, path + ".inputs." + input.Name);
+            }
+            void CheckPrimitive(JsonElement value, string path)
+            {
+                if (value.ValueKind == JsonValueKind.Array && value.GetArrayLength() >= 3 &&
+                    value[0].ValueKind == JsonValueKind.Number && value[0].TryGetInt32(out int type) &&
+                    type is 12 or 13 && value[2].ValueKind == JsonValueKind.String) Check(value[2].GetString()!, type == 13, path);
+            }
+            void Check(string id, bool list, string path)
+            {
+                if (!(list ? lists : variables).Contains(id))
+                    AddIssue(issues, $"Reference to undeclared {(list ? "list" : "variable")} ID '{id}'.", path, map);
+            }
+        }
     }
 
     private static void ValidateTargets(
@@ -82,6 +132,20 @@ internal static class ScratchProjectValidator
             RequireProperty(target, "variables", JsonValueKind.Object, targetPath, sourceMap, issues, out _);
             RequireProperty(target, "lists", JsonValueKind.Object, targetPath, sourceMap, issues, out _);
             RequireProperty(target, "broadcasts", JsonValueKind.Object, targetPath, sourceMap, issues, out _);
+            foreach (string kind in new[] { "variables", "lists", "broadcasts" })
+            {
+                if (!target.TryGetProperty(kind, out JsonElement data) || data.ValueKind != JsonValueKind.Object) continue;
+                foreach (JsonProperty entry in data.EnumerateObject())
+                {
+                    JsonElement tuple = entry.Value;
+                    bool valid = kind == "broadcasts" ? tuple.ValueKind == JsonValueKind.String :
+                        tuple.ValueKind == JsonValueKind.Array && tuple.GetArrayLength() >= 2 &&
+                        tuple[0].ValueKind == JsonValueKind.String &&
+                        (kind != "lists" || tuple[1].ValueKind == JsonValueKind.Array) &&
+                        (kind != "variables" || tuple.GetArrayLength() < 3 || tuple[2].ValueKind is JsonValueKind.True or JsonValueKind.False);
+                    if (!valid) AddIssue(issues, $"Invalid {kind} value tuple.", $"{targetPath}.{kind}.{entry.Name}", sourceMap);
+                }
+            }
             if (RequireProperty(target, "blocks", JsonValueKind.Object, targetPath, sourceMap, issues, out JsonElement blocks))
             {
                 ValidateBlocks(blocks, $"{targetPath}.blocks", sourceMap, issues);
@@ -161,7 +225,7 @@ internal static class ScratchProjectValidator
         }
     }
 
-    private static void ValidateBlocks(
+    internal static void ValidateBlocks(
         JsonElement blocks,
         string blocksPath,
         JsonSourceMap sourceMap,
@@ -173,6 +237,7 @@ internal static class ScratchProjectValidator
             JsonElement block = blockProperty.Value;
             if (block.ValueKind != JsonValueKind.Object)
             {
+                if (ScratchGraphValidator.IsPrimitive(block, true)) continue;
                 AddIssue(issues, "Scratch block entries must be objects.", blockPath, sourceMap);
                 continue;
             }
@@ -185,6 +250,7 @@ internal static class ScratchProjectValidator
             RequireProperty(block, "shadow", JsonValueKind.True, JsonValueKind.False, blockPath, sourceMap, issues, out _);
             RequireProperty(block, "topLevel", JsonValueKind.True, JsonValueKind.False, blockPath, sourceMap, issues, out _);
         }
+        ScratchGraphValidator.Validate(blocks, blocksPath, sourceMap, issues);
     }
 
     private static bool RequireNonEmptyString(

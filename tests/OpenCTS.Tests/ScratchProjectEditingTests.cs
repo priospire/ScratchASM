@@ -44,7 +44,7 @@ public sealed class ScratchProjectEditingTests
 
             Assert.IsFalse(first.Issues.Any(issue => issue.Severity == DiagnosticSeverity.Error), Format(first.Issues));
             Assert.AreEqual(first.SourceText, second.SourceText);
-            StringAssert.Contains(first.SourceText, "global var score = 1");
+            StringAssert.Contains(first.SourceText, "global var score = \"1\"");
             StringAssert.Contains(first.SourceText, "@event.greenflag:");
             StringAssert.Contains(first.SourceText, "motion.move 10");
 
@@ -117,7 +117,7 @@ public sealed class ScratchProjectEditingTests
             Assert.IsTrue(session.Issues.Any(issue =>
                 issue.Severity == DiagnosticSeverity.Error &&
                 issue.Message.Contains("cycle", StringComparison.OrdinalIgnoreCase)), Format(session.Issues));
-            StringAssert.Contains(session.SourceText, "motion_movesteps");
+            Assert.IsFalse(session.CanEdit);
         }
         finally
         {

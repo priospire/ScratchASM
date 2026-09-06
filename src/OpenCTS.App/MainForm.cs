@@ -2,16 +2,13 @@ using OpenCTS.Core;
 
 namespace OpenCTS.App;
 
-public sealed class MainForm : Form
+public sealed partial class MainForm : Form
 {
     private readonly ScratchProjectConverter _converter = new();
     private readonly TextBox _inputPathTextBox = new();
     private readonly TextBox _outputPathTextBox = new();
-    private readonly RichTextBox _sourceEditor = new();
+    private readonly CodeEditor _sourceEditor = new();
     private readonly RichTextBox _statusTextBox = new();
-    private readonly Button _convertButton = new();
-    private readonly Button _repairButton = new();
-    private readonly Button _saveSourceButton = new();
     private readonly CheckBox _attemptRepairCheckBox = new();
     private readonly CheckBox _darkModeCheckBox = new();
     private readonly System.Windows.Forms.Timer _diagnosticsTimer = new() { Interval = 350 };
@@ -22,98 +19,31 @@ public sealed class MainForm : Form
     private string? _editSessionPath;
     private bool _isApplyingHighlight;
     private bool _isBusy;
-    private bool _diagnosticsPending;
     private int _diagnosticsVersion;
 
-    public MainForm()
+    public MainForm(string? initialPath = null, bool persistPreferences = true)
     {
+        _persistPreferences = persistPreferences;
         Text = "ScratchASM IDE";
         StartPosition = FormStartPosition.CenterScreen;
-        MinimumSize = new Size(980, 680);
-        Size = new Size(1180, 760);
+        MinimumSize = new Size(900, 600);
+        Size = new Size(1240, 820);
         Font = new Font("Segoe UI", 9F);
 
         _diagnosticsTimer.Tick += DiagnosticsTimer_Tick;
         Controls.Add(BuildLayout());
+        InitializeIde();
         ApplyTheme();
         SetStatus("Ready.", _theme.Muted);
+        if (initialPath is not null) Shown += (_, _) =>
+        {
+            _inputPathTextBox.Text = initialPath;
+            SetDefaultOutputPath(initialPath);
+            LoadInputPreview(initialPath);
+        };
     }
 
-    private Control BuildLayout()
-    {
-        TableLayoutPanel root = new()
-        {
-            Dock = DockStyle.Fill,
-            ColumnCount = 1,
-            RowCount = 4,
-            Padding = new Padding(12)
-        };
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 58));
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 92));
-        root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 160));
-
-        root.Controls.Add(CreateHeader(), 0, 0);
-        root.Controls.Add(CreatePathsPanel(), 0, 1);
-        root.Controls.Add(CreateEditorPanel(), 0, 2);
-        root.Controls.Add(CreateStatusPanel(), 0, 3);
-        return root;
-    }
-
-    private Control CreateHeader()
-    {
-        TableLayoutPanel header = new()
-        {
-            Dock = DockStyle.Fill,
-            ColumnCount = 2,
-            RowCount = 1,
-            Padding = new Padding(0, 0, 0, 8)
-        };
-        header.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-        header.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
-
-        Label title = new()
-        {
-            Text = "ScratchASM IDE",
-            AutoSize = true,
-            Font = new Font("Segoe UI Semibold", 17F, FontStyle.Bold),
-            Margin = new Padding(0, 8, 0, 0)
-        };
-        header.Controls.Add(title, 0, 0);
-
-        FlowLayoutPanel actions = new()
-        {
-            AutoSize = true,
-            FlowDirection = FlowDirection.RightToLeft,
-            Dock = DockStyle.Fill,
-            WrapContents = false
-        };
-
-        _convertButton.Text = "Compile";
-        _convertButton.MinimumSize = new Size(104, 34);
-        _convertButton.Click += ConvertButton_Click;
-        actions.Controls.Add(_convertButton);
-
-        _repairButton.Text = "Repair";
-        _repairButton.MinimumSize = new Size(92, 34);
-        _repairButton.Click += RepairButton_Click;
-        actions.Controls.Add(_repairButton);
-
-        _saveSourceButton.Text = "Save Source";
-        _saveSourceButton.MinimumSize = new Size(108, 34);
-        _saveSourceButton.Click += SaveSourceButton_Click;
-        actions.Controls.Add(_saveSourceButton);
-
-        _darkModeCheckBox.Text = "Dark";
-        _darkModeCheckBox.Checked = true;
-        _darkModeCheckBox.AutoSize = true;
-        _darkModeCheckBox.Margin = new Padding(12, 9, 8, 0);
-        _darkModeCheckBox.CheckedChanged += DarkModeCheckBox_CheckedChanged;
-        actions.Controls.Add(_darkModeCheckBox);
-
-        header.Controls.Add(actions, 1, 0);
-        return header;
-    }
+    private Control BuildLayout() => BuildIdeLayout();
 
     private Control CreatePathsPanel()
     {
@@ -176,7 +106,10 @@ public sealed class MainForm : Form
         _sourceEditor.DetectUrls = false;
         _sourceEditor.Font = CreateMonoFont(10F);
         _sourceEditor.TextChanged += SourceEditor_TextChanged;
-        panel.Controls.Add(_sourceEditor, 0, 1);
+        Panel body = new() { Dock = DockStyle.Fill };
+        body.Controls.Add(_sourceEditor);
+        body.Controls.Add(new LineNumberMargin(_sourceEditor) { Dock = DockStyle.Left, Width = 58 });
+        panel.Controls.Add(body, 0, 1);
         shell.Controls.Add(panel);
         return shell;
     }
@@ -272,14 +205,12 @@ public sealed class MainForm : Form
         using OpenFileDialog dialog = new()
         {
             Title = "Select ScratchASM or Scratch input",
-            Filter = "ScratchASM and Scratch inputs (*.sasm;*.mono;*.sb3;*.json)|*.sasm;*.mono;*.sb3;*.json|All files (*.*)|*.*",
+            Filter = "ScratchASM and Scratch (*.sasm;*.mono;*.cts;*.sb3;*.json)|*.sasm;*.mono;*.cts;*.sb3;*.json|All files (*.*)|*.*",
             CheckFileExists = true
         };
 
         if (dialog.ShowDialog(this) == DialogResult.OK)
         {
-            _inputPathTextBox.Text = dialog.FileName;
-            SetDefaultOutputPath(dialog.FileName);
             LoadInputPreview(dialog.FileName);
         }
     }
@@ -293,11 +224,7 @@ public sealed class MainForm : Form
 
         if (dialog.ShowDialog(this) == DialogResult.OK)
         {
-            _inputPathTextBox.Text = dialog.SelectedPath;
-            SetDefaultOutputPath(dialog.SelectedPath);
-            _editSession = null;
-            _editSessionPath = null;
-            SetStatus("Folder input selected.", _theme.Muted);
+            LoadInputPreview(dialog.SelectedPath);
         }
     }
 
@@ -333,50 +260,55 @@ public sealed class MainForm : Form
         await RunConversionAsync(forceRepair: true);
     }
 
-    private void SaveSourceButton_Click(object? sender, EventArgs e)
+    private void SaveSourceButton_Click(object? sender, EventArgs e) => SaveDocument(false);
+
+    private bool SaveDocument(bool saveAs)
     {
-        string inputPath = TrimPath(_inputPathTextBox.Text);
-        if (IsScratchAsmPath(inputPath))
+        if (_isBusy || _sourceEditor.ReadOnly) return false;
+        string? path = IsScratchAsmPath(_loadedPath ?? "") ? _loadedPath : null;
+        if (saveAs || path is null)
         {
-            try
+            using SaveFileDialog dialog = new()
             {
-                File.WriteAllText(inputPath, _sourceEditor.Text);
-                SetStatus($"Saved {inputPath}", _theme.Success);
-            }
-            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
+                Title = "Save ScratchASM source", Filter = "ScratchASM source (*.sasm)|*.sasm",
+                DefaultExt = "sasm", AddExtension = true, OverwritePrompt = true,
+                FileName = Path.ChangeExtension(_loadedPath ?? "project", ".sasm")
+            };
+            if (dialog.ShowDialog(this) != DialogResult.OK) return false;
+            path = dialog.FileName;
+        }
+        try
+        {
+            if (_editSession is not null)
             {
-                SetStatus(ex.Message, _theme.Error);
+                ConversionResult result = _editSession.SaveSource(_sourceEditor.Text, path, true);
+                if (!result.Success) { ShowIssues(result.Issues, "Source save failed.", _theme.Error); return false; }
+                ReplaceEditorText(File.ReadAllText(path));
             }
-
-            return;
+            else ScratchProjectEditSession.WriteSourceFile(path, _sourceEditor.Text, true);
+            _loadedPath = Path.GetFullPath(path);
+            _editSessionPath = _editSession is null ? null : _loadedPath;
+            _inputPathTextBox.Text = _loadedPath;
+            _savedText = _sourceEditor.Text;
+            UpdateDocumentTitle();
+            SetStatus($"Saved {path}", _theme.Success);
+            return true;
         }
-
-        using SaveFileDialog dialog = new()
-        {
-            Title = "Save ScratchASM source",
-            Filter = "ScratchASM source (*.sasm)|*.sasm|All files (*.*)|*.*",
-            DefaultExt = "sasm",
-            AddExtension = true,
-            OverwritePrompt = true
-        };
-
-        if (dialog.ShowDialog(this) == DialogResult.OK)
-        {
-            File.WriteAllText(dialog.FileName, _sourceEditor.Text);
-            _inputPathTextBox.Text = dialog.FileName;
-            SetDefaultOutputPath(dialog.FileName);
-            SetStatus($"Saved {dialog.FileName}", _theme.Success);
-        }
+        catch (Exception ex) when (IsDocumentError(ex)) { SetStatus(ex.Message, _theme.Error); return false; }
     }
 
     private async Task RunConversionAsync(bool forceRepair)
     {
-        string inputPath = TrimPath(_inputPathTextBox.Text);
+        if (_isBusy) return;
+        string requested = TrimPath(_inputPathTextBox.Text);
+        if (requested.Length > 0 && !SameDocument(requested, _loadedPath) && !await LoadDocumentAsync(requested)) return;
+        string inputPath = _loadedPath ?? Path.Combine(Directory.GetCurrentDirectory(), "untitled.sasm");
         string outputPath = TrimPath(_outputPathTextBox.Text);
+        if (File.Exists(outputPath) && MessageBox.Show(this, "Replace the existing output project?", "Export project",
+            MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes) return;
         bool attemptRepair = forceRepair || _attemptRepairCheckBox.Checked;
 
         SetBusy(true);
-        _diagnosticsPending = false;
         _diagnosticsTimer.Stop();
         _diagnosticsVersion++;
         SetStatus(forceRepair ? "Repairing..." : "Compiling...", _theme.Muted);
@@ -397,13 +329,11 @@ public sealed class MainForm : Form
                 }
 
                 ScratchProjectEditSession session = _editSession!;
-                result = await Task.Run(() => session.WriteEdited(source, outputPath));
+                result = await Task.Run(() => session.WriteEdited(source, outputPath, overwrite: true));
             }
             else
             {
-                string? sourceOverride = IsScratchAsmPath(inputPath) && _sourceEditor.TextLength > 0
-                    ? _sourceEditor.Text
-                    : null;
+                string? sourceOverride = IsScratchAsmPath(inputPath) ? _sourceEditor.Text : null;
                 if (attemptRepair && sourceOverride is not null)
                 {
                     ScratchAsmSourceRepairResult repair = ScratchAsmSourceRepairer.Repair(sourceOverride);
@@ -415,19 +345,17 @@ public sealed class MainForm : Form
                 result = await Task.Run(() => _converter.ConvertToSb3(inputPath, outputPath, new ConversionOptions
                 {
                     AttemptSafeRepair = attemptRepair,
-                    ScratchAsmSourceText = sourceOverride
+                    ScratchAsmSourceText = sourceOverride,
+                    Overwrite = true
                 }));
             }
 
             ShowConversionResult(result, prefixIssues);
         }
+        catch (Exception ex) when (IsDocumentError(ex)) { SetStatus(ex.Message, _theme.Error); }
         finally
         {
             SetBusy(false);
-            if (_diagnosticsPending && _sourceEditor.TextLength > 0)
-            {
-                _diagnosticsTimer.Start();
-            }
         }
     }
 
@@ -435,8 +363,7 @@ public sealed class MainForm : Form
     {
         return _editSession is not null &&
             _editSessionPath is not null &&
-            string.Equals(Path.GetFullPath(inputPath), _editSessionPath, StringComparison.OrdinalIgnoreCase) &&
-            _sourceEditor.TextLength > 0;
+            string.Equals(Path.GetFullPath(inputPath), _editSessionPath, StringComparison.OrdinalIgnoreCase);
     }
 
     private void ShowConversionResult(ConversionResult result, IReadOnlyList<ValidationIssue> prefixIssues)
@@ -489,7 +416,8 @@ public sealed class MainForm : Form
                 outputName = "project";
             }
 
-            _outputPathTextBox.Text = Path.Combine(outputDirectory, outputName + ".sb3");
+            _outputPathTextBox.Text = Path.Combine(outputDirectory, outputName +
+                (Path.GetExtension(fullInputPath).Equals(".sb3", StringComparison.OrdinalIgnoreCase) ? ".edited.sb3" : ".sb3"));
         }
         catch (Exception ex) when (ex is ArgumentException or NotSupportedException or PathTooLongException)
         {
@@ -499,70 +427,66 @@ public sealed class MainForm : Form
 
     private void InputPathTextBox_Leave(object? sender, EventArgs e)
     {
-        string inputPath = TrimPath(_inputPathTextBox.Text);
-        if (!string.IsNullOrWhiteSpace(inputPath))
-        {
-            SetDefaultOutputPath(inputPath);
-            LoadInputPreview(inputPath);
-        }
+        string path = TrimPath(_inputPathTextBox.Text);
+        if (!_isBusy && path.Length > 0 && !SameDocument(path, _loadedPath)) LoadInputPreview(path);
     }
 
-    private void LoadInputPreview(string inputPath)
+    private async void LoadInputPreview(string inputPath) => await LoadDocumentAsync(inputPath);
+
+    private async Task<bool> LoadDocumentAsync(string inputPath)
     {
-        _editSession = null;
-        _editSessionPath = null;
-        if (IsScratchAsmPath(inputPath))
-        {
-            LoadScratchAsmSource(inputPath);
-            return;
-        }
-
-        if (!string.Equals(Path.GetExtension(inputPath), ".sb3", StringComparison.OrdinalIgnoreCase) ||
-            !File.Exists(inputPath))
-        {
-            return;
-        }
-
+        if (_isBusy || SameDocument(inputPath, _loadedPath)) return !_isBusy;
+        if (!ConfirmUnsaved()) { _inputPathTextBox.Text = _loadedPath ?? ""; return false; }
+        SetBusy(true);
+        _diagnosticsVersion++;
+        _diagnosticsTimer.Stop();
         try
         {
-            ScratchProjectEditSession session = ScratchProjectEditSession.Open(inputPath);
+            string fullPath = Path.GetFullPath(TrimPath(inputPath));
+            if (!File.Exists(fullPath) && !Directory.Exists(fullPath)) throw new FileNotFoundException($"Input was not found: {fullPath}");
+            string text = "";
+            ScratchProjectEditSession? session = null;
+            List<ValidationIssue> issues = [];
+            if (IsScratchAsmPath(fullPath))
+            {
+                text = await File.ReadAllTextAsync(fullPath);
+                try { session = await Task.Run(() => ScratchProjectEditSession.OpenSourceCompanion(text, fullPath)); }
+                catch (Exception ex) when (IsDocumentError(ex)) { issues.Add(new ValidationIssue(ex.Message, "$", null)); }
+            }
+            else if (Path.GetExtension(fullPath).Equals(".sb3", StringComparison.OrdinalIgnoreCase))
+            {
+                try
+                {
+                    session = await Task.Run(() => ScratchProjectEditSession.Open(fullPath));
+                    text = session.SourceText;
+                    issues.AddRange(session.Issues);
+                }
+                catch (Exception ex) when (IsDocumentError(ex)) { issues.Add(new ValidationIssue(ex.Message, "$", null)); }
+            }
+            if (IsDisposed) return false;
+            _loadedPath = fullPath;
+            _inputPathTextBox.Text = fullPath;
             _editSession = session;
-            _editSessionPath = Path.GetFullPath(inputPath);
-            ReplaceEditorText(session.SourceText);
-            if (session.Issues.Count == 0)
-            {
-                SetStatus("Loaded .sb3 as editable ScratchASM source.", _theme.Success);
-            }
-            else
-            {
-                ShowIssues(session.Issues, "Loaded .sb3 with diagnostics.", _theme.Warning);
-            }
+            _editSessionPath = session is null ? null : fullPath;
+            _packageOnly = !IsScratchAsmPath(fullPath) && session is not { CanEdit: true };
+            ReplaceEditorText(text);
+            _sourceEditor.ResetHistory();
+            _savedText = text;
+            _outputPathTextBox.Clear();
+            SetDefaultOutputPath(fullPath);
+            _outline.Nodes.Clear();
+            UpdateDocumentTitle();
+            if (issues.Count > 0) ShowIssues(issues, "Input diagnostics", _theme.Warning);
+            else SetStatus($"Opened {Path.GetFileName(fullPath)}", _theme.Success);
+            return true;
         }
-        catch (Exception ex) when (ex is IOException or InvalidDataException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
+        catch (Exception ex) when (IsDocumentError(ex))
         {
-            SetStatus($"Could not decompile .sb3: {ex.Message}", _theme.Error);
-        }
-    }
-
-    private void LoadScratchAsmSource(string inputPath)
-    {
-        if (!File.Exists(inputPath))
-        {
-            return;
-        }
-
-        try
-        {
-            ReplaceEditorText(File.ReadAllText(inputPath));
-            SetStatus(ScratchAsmLanguage.IsCompatibilitySourceName(inputPath)
-                ? "Loaded legacy .mono source. Save new files as .sasm."
-                : "Loaded ScratchASM source.",
-                ScratchAsmLanguage.IsCompatibilitySourceName(inputPath) ? _theme.Warning : _theme.Success);
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
-        {
+            _inputPathTextBox.Text = _loadedPath ?? "";
             SetStatus(ex.Message, _theme.Error);
+            return false;
         }
+        finally { if (!IsDisposed) { SetBusy(false); if (!_packageOnly) ScheduleDiagnostics(); } }
     }
 
     private void ReplaceEditorText(string text)
@@ -577,7 +501,7 @@ public sealed class MainForm : Form
             _isApplyingHighlight = false;
         }
 
-        ApplyScratchAsmHighlighting();
+        UpdateDocumentTitle();
         ScheduleDiagnostics();
     }
 
@@ -588,26 +512,15 @@ public sealed class MainForm : Form
             return;
         }
 
-        ApplyScratchAsmHighlighting();
+        UpdateDocumentTitle();
         ScheduleDiagnostics();
     }
 
     private void ScheduleDiagnostics()
     {
         _diagnosticsTimer.Stop();
-        _diagnosticsPending = true;
         _diagnosticsVersion++;
 
-        if (_sourceEditor.TextLength == 0)
-        {
-            _diagnosticsPending = false;
-            if (!_isBusy)
-            {
-                SetStatus("Ready.", _theme.Muted);
-            }
-
-            return;
-        }
 
         if (!_isBusy)
         {
@@ -618,25 +531,24 @@ public sealed class MainForm : Form
     private async void DiagnosticsTimer_Tick(object? sender, EventArgs e)
     {
         _diagnosticsTimer.Stop();
-        if (_isBusy || _sourceEditor.TextLength == 0)
-        {
-            return;
-        }
-
-        _diagnosticsPending = false;
+        if (_isBusy || _packageOnly) return;
+        if (_analysisRunning) { _diagnosticsTimer.Start(); return; }
+        _analysisRunning = true;
         int version = _diagnosticsVersion;
-        string sourceText = _sourceEditor.Text;
-        string inputPath = TrimPath(_inputPathTextBox.Text);
-        string sourceName = IsScratchAsmPath(inputPath) ? inputPath : "editor.sasm";
-        IReadOnlyList<CtsDiagnostic> diagnostics = await Task.Run(
-            () => CtsCompiler.Compile(sourceText, sourceName).Diagnostics);
-
-        if (version != _diagnosticsVersion || _isBusy || IsDisposed)
+        string source = _sourceEditor.Text;
+        string name = IsScratchAsmPath(_loadedPath ?? "") ? _loadedPath! : "editor.sasm";
+        try
         {
-            return;
+            var analysis = await Task.Run(() => new OpenCTS.LanguageServices.DocumentAnalyzer().Analyze(source, name));
+            if (IsDisposed || version != _diagnosticsVersion || _isBusy) return;
+            _sourceEditor.ApplyColors(analysis.ColorSpans, _theme.EditorText, _theme.Muted, _theme.IsDark);
+            UpdateOutline(analysis.Symbols);
+            ShowDiagnostics(analysis.Diagnostics.Select(item => new CtsDiagnostic(item.Code,
+                item.Severity == "error" ? DiagnosticSeverity.Error : DiagnosticSeverity.Warning, item.Message,
+                new SourceSpan(item.Range.Start, item.Range.End))).ToArray());
         }
-
-        ShowDiagnostics(diagnostics);
+        catch (Exception ex) when (IsDocumentError(ex)) { if (!IsDisposed) SetStatus(ex.Message, _theme.Error); }
+        finally { _analysisRunning = false; if (!IsDisposed && version != _diagnosticsVersion && !_isBusy) ScheduleDiagnostics(); }
     }
 
     private void ShowDiagnostics(IReadOnlyList<CtsDiagnostic> diagnostics)
@@ -684,6 +596,7 @@ public sealed class MainForm : Form
         int start = _statusTextBox.TextLength;
         _statusTextBox.SelectionColor = color;
         _statusTextBox.AppendText(text);
+        _activity.Text = text.Length > 160 ? text[..160] : text;
         if (sourceSpan is not null)
         {
             _displayedDiagnostics.Add(new DiagnosticDisplaySpan(start, text.Length, sourceSpan));
@@ -715,61 +628,15 @@ public sealed class MainForm : Form
         _sourceEditor.Focus();
     }
 
-    private void ApplyScratchAsmHighlighting()
-    {
-        if (_sourceEditor.TextLength == 0)
-        {
-            return;
-        }
-
-        _isApplyingHighlight = true;
-        int selectionStart = _sourceEditor.SelectionStart;
-        int selectionLength = _sourceEditor.SelectionLength;
-
-        try
-        {
-            _sourceEditor.SuspendLayout();
-            _sourceEditor.SelectAll();
-            _sourceEditor.SelectionColor = _theme.EditorText;
-
-            foreach (CtsColorSpan span in CtsSyntaxClassifier.Classify(_sourceEditor.Text))
-            {
-                if (span.Start < 0 || span.Start + span.Length > _sourceEditor.TextLength)
-                {
-                    continue;
-                }
-
-                _sourceEditor.Select(span.Start, span.Length);
-                _sourceEditor.SelectionColor = AdjustSyntaxColor(span);
-            }
-
-            _sourceEditor.Select(
-                Math.Min(selectionStart, _sourceEditor.TextLength),
-                Math.Min(selectionLength, Math.Max(0, _sourceEditor.TextLength - selectionStart)));
-        }
-        finally
-        {
-            _sourceEditor.ResumeLayout();
-            _isApplyingHighlight = false;
-        }
-    }
-
-    private Color AdjustSyntaxColor(CtsColorSpan span)
-    {
-        Color color = ColorTranslator.FromHtml(span.Color);
-        if (_theme.IsDark && span.Kind == "Comment")
-        {
-            return _theme.Muted;
-        }
-
-        return color;
-    }
+    private void ApplyScratchAsmHighlighting() =>
+        _sourceEditor.ApplyColors(CtsSyntaxClassifier.Classify(_sourceEditor.Text), _theme.EditorText, _theme.Muted, _theme.IsDark);
 
     private void DarkModeCheckBox_CheckedChanged(object? sender, EventArgs e)
     {
         _theme = _darkModeCheckBox.Checked ? UiTheme.Dark : UiTheme.Light;
         ApplyTheme();
         ApplyScratchAsmHighlighting();
+        SaveThemePreference();
     }
 
     private void ApplyTheme()
@@ -781,6 +648,11 @@ public sealed class MainForm : Form
         _sourceEditor.ForeColor = _theme.EditorText;
         _statusTextBox.BackColor = _theme.StatusBackground;
         _statusTextBox.ForeColor = _theme.Text;
+        _outline.BackColor = _theme.Surface;
+        _outline.ForeColor = _theme.Text;
+        _sourceEditor.GutterColor = _theme.Muted;
+        _documentLabel.ForeColor = _theme.Success;
+        if (_ideTools is not null) _ideTools.BackColor = _theme.Surface;
     }
 
     private void ApplyThemeToControl(Control control)
@@ -825,9 +697,11 @@ public sealed class MainForm : Form
     private void SetBusy(bool busy)
     {
         _isBusy = busy;
-        _convertButton.Enabled = !busy;
-        _repairButton.Enabled = !busy;
-        _saveSourceButton.Enabled = !busy;
+        _sourceEditor.ReadOnly = busy || _packageOnly;
+        _inputPathTextBox.Enabled = !busy;
+        _outputPathTextBox.Enabled = !busy;
+        if (_ideTools is not null) _ideTools.Enabled = !busy;
+        UseWaitCursor = busy;
         _attemptRepairCheckBox.Enabled = !busy;
     }
 
@@ -858,6 +732,8 @@ public sealed class MainForm : Form
         if (disposing)
         {
             _diagnosticsTimer.Dispose();
+            if (_ideTools is not null)
+                foreach (ToolStripItem item in _ideTools.Items) item.Image?.Dispose();
         }
 
         base.Dispose(disposing);
@@ -883,16 +759,16 @@ public sealed class MainForm : Form
     {
         public static UiTheme Dark { get; } = new(
             true,
-            Color.FromArgb(16, 20, 27),
-            Color.FromArgb(25, 31, 42),
-            Color.FromArgb(14, 18, 25),
-            Color.FromArgb(11, 15, 22),
-            Color.FromArgb(14, 18, 25),
+            Color.FromArgb(30, 30, 32),
+            Color.FromArgb(38, 38, 41),
+            Color.FromArgb(35, 35, 38),
+            Color.FromArgb(27, 27, 29),
+            Color.FromArgb(35, 35, 38),
             Color.FromArgb(229, 234, 242),
             Color.FromArgb(229, 234, 242),
             Color.FromArgb(149, 160, 177),
-            Color.FromArgb(37, 99, 235),
-            Color.FromArgb(29, 78, 216),
+            Color.FromArgb(31, 117, 84),
+            Color.FromArgb(26, 94, 69),
             Color.FromArgb(34, 197, 94),
             Color.FromArgb(245, 158, 11),
             Color.FromArgb(239, 68, 68));
@@ -907,8 +783,8 @@ public sealed class MainForm : Form
             Color.FromArgb(24, 31, 42),
             Color.FromArgb(24, 31, 42),
             Color.FromArgb(96, 108, 124),
-            Color.FromArgb(37, 99, 235),
-            Color.FromArgb(29, 78, 216),
+            Color.FromArgb(31, 117, 84),
+            Color.FromArgb(26, 94, 69),
             Color.FromArgb(22, 163, 74),
             Color.FromArgb(202, 138, 4),
             Color.FromArgb(220, 38, 38));

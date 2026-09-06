@@ -1,4 +1,5 @@
 using System.Text.Json;
+using OpenCTS.Core;
 
 namespace OpenCTS.LanguageServices;
 
@@ -17,6 +18,12 @@ public static class ScratchAsmProjectLoader
         string root = Directory.Exists(fullPath) ? fullPath : Path.GetDirectoryName(fullPath) ?? Directory.GetCurrentDirectory();
         string manifestPath = Directory.Exists(fullPath) ? Path.Combine(root, "scratchasm.json") : fullPath;
         WorkspacePathPolicy policy = new(root);
+        if (File.Exists(fullPath) && ScratchAsmLanguage.IsSupportedSourceName(fullPath))
+        {
+            CtsProjectReference? reference = CtsParser.Parse(File.ReadAllText(fullPath)).CompilationUnit.FileDeclarations.OfType<CtsProjectReference>().FirstOrDefault();
+            return new ScratchAsmProject(root, null, fullPath, Path.Combine(root, "build", Path.GetFileNameWithoutExtension(fullPath) + ".sb3"),
+                reference is null ? null : policy.Resolve(reference.FileName));
+        }
 
         if (File.Exists(manifestPath))
         {
@@ -47,4 +54,3 @@ public static class ScratchAsmProjectLoader
         public string? Baseline { get; init; }
     }
 }
-

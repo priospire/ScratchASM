@@ -15,7 +15,7 @@ function activate(context) {
 
   context.subscriptions.push(vscode.workspace.onDidOpenTextDocument(document => client.open(document)));
   context.subscriptions.push(vscode.workspace.onDidChangeTextDocument(event => client.change(event.document)));
-  context.subscriptions.push(vscode.workspace.onDidCloseTextDocument(document => diagnostics.delete(document.uri)));
+  context.subscriptions.push(vscode.workspace.onDidCloseTextDocument(document => client.close(document)));
   context.subscriptions.push(vscode.commands.registerCommand("scratchasm.restartLanguageHost", () => {
     client.dispose();
     diagnostics.clear();
@@ -73,17 +73,21 @@ class ScratchAsmClient {
     });
     this.process.stdout.on("data", chunk => this.accept(chunk));
     this.process.stderr.on("data", chunk => console.warn(chunk.toString()));
+    this.process.on("error", error => {
+      this.failPending(error);
+      this.ready = false;
+      vscode.window.showWarningMessage(`ScratchASM language host could not start: ${error.message}`);
+    });
+    this.process.stdin.on("error", error => this.failPending(error));
     this.process.on("exit", () => {
       this.ready = false;
       this.process = undefined;
-      for (const reject of this.pending.values()) {
-        reject(new Error("ScratchASM language host exited."));
-      }
-      this.pending.clear();
+      this.failPending(new Error("ScratchASM language host exited."));
     });
 
     this.request("initialize", {}).then(() => {
       this.ready = true;
+      this.notify("initialized", {});
       for (const document of vscode.workspace.textDocuments) {
         this.open(document);
       }
@@ -91,12 +95,28 @@ class ScratchAsmClient {
   }
 
   dispose() {
+    this.failPending(new Error("ScratchASM language host stopped."));
     if (this.process) {
       this.process.kill();
     }
     this.process = undefined;
     this.ready = false;
+    this.buffer = Buffer.alloc(0);
+  }
+
+  failPending(error) {
+    for (const pending of this.pending.values()) {
+      clearTimeout(pending.timer);
+      pending.reject(error);
+    }
     this.pending.clear();
+  }
+
+  close(document) {
+    this.diagnostics.delete(document.uri);
+    if (this.ready && document.languageId === "scratchasm") {
+      this.notify("textDocument/didClose", { textDocument: { uri: document.uri.toString() } });
+    }
   }
 
   open(document) {
@@ -155,7 +175,15 @@ class ScratchAsmClient {
     const id = this.sequence++;
     const message = { jsonrpc: "2.0", id, method, params };
     return new Promise((resolve, reject) => {
-      this.pending.set(id, { resolve, reject });
+      if (!this.process || !this.process.stdin.writable) {
+        reject(new Error("ScratchASM language host is not running."));
+        return;
+      }
+      const timer = setTimeout(() => {
+        this.pending.delete(id);
+        reject(new Error(`ScratchASM request timed out: ${method}`));
+      }, 15000);
+      this.pending.set(id, { resolve, reject, timer });
       this.write(message);
     });
   }
@@ -186,6 +214,11 @@ class ScratchAsmClient {
       }
 
       const length = Number(match[1]);
+      if (!Number.isSafeInteger(length) || length > 16 * 1024 * 1024) {
+        this.failPending(new Error("ScratchASM host returned an oversized response."));
+        this.buffer = Buffer.alloc(0);
+        return;
+      }
       const total = headerEnd + 4 + length;
       if (this.buffer.length < total) {
         return;
@@ -193,7 +226,8 @@ class ScratchAsmClient {
 
       const payload = this.buffer.slice(headerEnd + 4, total).toString("utf8");
       this.buffer = this.buffer.slice(total);
-      this.dispatch(JSON.parse(payload));
+      try { this.dispatch(JSON.parse(payload)); }
+      catch (error) { this.failPending(error); }
     }
   }
 
@@ -210,6 +244,7 @@ class ScratchAsmClient {
       }
 
       this.pending.delete(message.id);
+      clearTimeout(pending.timer);
       if (message.error) {
         pending.reject(new Error(message.error.message || "ScratchASM language host request failed."));
       } else {

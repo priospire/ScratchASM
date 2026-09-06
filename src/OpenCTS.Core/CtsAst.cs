@@ -20,6 +20,8 @@ public sealed record CtsCompilationUnit(IReadOnlyList<CtsTargetDeclaration> Targ
 
 public abstract record CtsFileDeclaration(SourceSpan Span);
 
+public sealed record CtsProjectReference(string FileName, SourceSpan Span) : CtsFileDeclaration(Span);
+
 public sealed record CtsConstDeclaration(
     string Name,
     CtsValue Value,
@@ -54,6 +56,10 @@ public sealed record CtsTargetDeclaration(
     SourceSpan Span);
 
 public abstract record CtsTargetMember(SourceSpan Span);
+
+public sealed record CtsRawBlocksDeclaration(string Json, SourceSpan Span) : CtsTargetMember(Span);
+
+public sealed record CtsTargetOriginDeclaration(string Name, SourceSpan Span) : CtsTargetMember(Span);
 
 public enum CtsVariableScope
 {

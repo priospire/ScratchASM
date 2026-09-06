@@ -172,22 +172,23 @@ internal sealed class ScratchInputPackage : IDisposable
             zipStream = File.OpenRead(fullInputPath);
             ZipArchive zipArchive = new(zipStream, ZipArchiveMode.Read, leaveOpen: false);
             Dictionary<string, ZipArchiveEntry> entries = new(StringComparer.Ordinal);
+            if (zipArchive.Entries.Count > 4096) throw new ScratchPackageException("ZIP contains more than 4096 entries.");
+            long totalBytes = 0;
             foreach (ZipArchiveEntry entry in zipArchive.Entries)
             {
-                if (requireSafeArchive && !IsSafeArchiveEntryPath(entry))
+                totalBytes += entry.Length;
+                if (entry.Length > 128L * 1024 * 1024 || totalBytes > 512L * 1024 * 1024)
+                    throw new ScratchPackageException("ZIP expands beyond the supported size limit.");
+                if (!IsSafeArchiveEntryPath(entry))
                 {
                     throw new ScratchPackageException($"Safe repair is impossible because the ZIP contains an unsafe ZIP entry path: {entry.FullName}");
                 }
 
-                if (requireSafeArchive && !entries.TryAdd(entry.FullName, entry))
+                if (!entries.TryAdd(entry.FullName, entry))
                 {
                     throw new ScratchPackageException($"Safe repair is impossible because the ZIP contains a duplicate ZIP entry path: {entry.FullName}");
                 }
 
-                if (!requireSafeArchive && entry.FullName.Length > 0 && entry.FullName == entry.Name)
-                {
-                    entries[entry.FullName] = entry;
-                }
             }
 
             ZipArchiveEntry? projectJsonEntry = entries.GetValueOrDefault("project.json");
@@ -237,14 +238,7 @@ internal sealed class ScratchInputPackage : IDisposable
 
     private static bool IsSafeArchiveEntryPath(ZipArchiveEntry entry)
     {
-        string path = entry.FullName;
-        return path.Length > 0 &&
-            path == entry.Name &&
-            path != "." &&
-            path != ".." &&
-            path.IndexOfAny(Path.GetInvalidFileNameChars()) < 0 &&
-            !path.Contains('/', StringComparison.Ordinal) &&
-            !path.Contains('\\', StringComparison.Ordinal);
+        return ScratchArchivePath.IsSafe(entry.FullName);
     }
 }
 

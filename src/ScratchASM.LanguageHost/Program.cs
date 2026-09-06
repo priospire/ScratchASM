@@ -25,8 +25,20 @@ internal static class Program
         LspDispatcher dispatcher = new();
         Stream input = Console.OpenStandardInput();
         Stream output = Console.OpenStandardOutput();
-        while (TryReadLspMessage(input, out JsonObject? message) && message is not null)
+        while (true)
         {
+            JsonObject? message;
+            try { if (!TryReadLspMessage(input, out message) || message is null) break; }
+            catch (JsonException ex)
+            {
+                WriteLspMessage(output, new JsonObject
+                {
+                    ["jsonrpc"] = "2.0", ["id"] = null,
+                    ["error"] = new JsonObject { ["code"] = -32700, ["message"] = ex.Message }
+                });
+                continue;
+            }
+            catch (InvalidDataException ex) { Console.Error.WriteLine(ex.Message); return 1; }
             foreach (JsonObject response in dispatcher.Handle(message))
             {
                 WriteLspMessage(output, response);
@@ -58,6 +70,7 @@ internal static class Program
                 Console.WriteLine(new JsonObject
                 {
                     ["jsonrpc"] = "2.0",
+                    ["id"] = null,
                     ["error"] = new JsonObject
                     {
                         ["code"] = -32700,
@@ -108,7 +121,7 @@ internal static class Program
 
         if (!headers.TryGetValue("Content-Length", out string? lengthText) ||
             !int.TryParse(lengthText, out int length) ||
-            length < 0)
+            length < 0 || length > 16 * 1024 * 1024)
         {
             return false;
         }
@@ -152,6 +165,7 @@ internal static class Program
             }
 
             bytes.Add((byte)value);
+            if (bytes.Count > 8192) throw new InvalidDataException("LSP header exceeds the supported size limit.");
         }
     }
 

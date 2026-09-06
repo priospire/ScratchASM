@@ -6,6 +6,7 @@
     <Project Path="src/ScratchASM.LanguageHost/ScratchASM.LanguageHost.csproj" />
   </Folder>
   <Folder Name="/tests/">
+    <Project Path="tests/OpenCTS.App.Tests/OpenCTS.App.Tests.csproj" />
     <Project Path="tests/OpenCTS.LanguageServices.Tests/OpenCTS.LanguageServices.Tests.csproj" />
     <Project Path="tests/OpenCTS.Tests/OpenCTS.Tests.csproj" />
     <Project Path="tests/ScratchASM.LanguageHost.Tests/ScratchASM.LanguageHost.Tests.csproj" />
