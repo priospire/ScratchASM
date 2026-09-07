@@ -11,6 +11,52 @@ namespace OpenCTS.App.Tests;
 public sealed class IdeTests
 {
     [TestMethod]
+    public void SavingSourceUsesTheBackgroundWorkerAndKeepsDocumentState() => OnUiThread(() =>
+    {
+        string directory = Directory.CreateTempSubdirectory("async-source-").FullName;
+        try
+        {
+            string path = Path.Combine(directory, "main.sasm");
+            var session = ScratchProjectDocument.Compile("stage {\n  var score = 0\n}\n").CreateSession();
+            Assert.IsTrue(session.SaveSource(session.SourceText, path).Success);
+            using MainForm form = new(path, persistPreferences: false); form.Show();
+            CodeEditor editor = Descendants(form).OfType<CodeEditor>().Single();
+            PumpUntil(() => form.Text.Contains("main.sasm", StringComparison.Ordinal) && !editor.ReadOnly);
+            editor.Select(editor.TextLength, 0); editor.SelectedText = "\n# saved edit";
+            int codePosition = editor.Text.IndexOf("score", StringComparison.Ordinal);
+            editor.Select(codePosition, 5);
+            var saving = (Task<bool>)typeof(MainForm).GetMethod("SaveDocumentAsync", BindingFlags.NonPublic | BindingFlags.Instance)!.Invoke(form, [false])!;
+            PumpUntil(() => saving.IsCompleted);
+            Assert.IsTrue(saving.GetAwaiter().GetResult());
+            StringAssert.Contains(File.ReadAllText(path), "# saved edit");
+            Assert.IsFalse(editor.ReadOnly);
+            Assert.DoesNotContain('*', form.Text);
+            Assert.AreEqual("score", editor.SelectedText);
+            Assert.IsTrue(ScratchProvenance.Inspect(path).ContentHashMatches);
+            editor.Undo();
+            Assert.DoesNotContain("# saved edit", editor.Text);
+        }
+        finally { Directory.Delete(directory, true); }
+    });
+    [TestMethod]
+    public void SavingPlainSourcePreservesSelectionAndUndoWhenTheMarkerIsInserted() => OnUiThread(() =>
+    {
+        using Form form = new();
+        using CodeEditor editor = new() { Dock = DockStyle.Fill };
+        form.Controls.Add(editor); form.Show();
+        editor.LoadSourceText("stage {\n}\n"); editor.ResetHistory();
+        editor.Select(editor.TextLength, 0); editor.SelectedText = "# edit\n";
+        editor.Select(0, 5);
+        string source = ScratchProvenance.StampSource(editor.Text, "source-saved");
+        editor.UpdateSavedSourceText(source);
+        Assert.AreEqual(source, editor.Text);
+        Assert.AreEqual("stage", editor.SelectedText);
+        editor.UpdateSavedSourceText(source);
+        Assert.AreEqual("stage", editor.SelectedText);
+        editor.Undo();
+        Assert.AreEqual("stage {\n}\n", editor.Text);
+    });
+    [TestMethod]
     public void SvgPreviewUsesPixelDimensionsAndRejectsOversizedPhysicalUnits()
     {
         MethodInfo read = typeof(MainForm).Assembly.GetType("OpenCTS.App.StagePreview")!.GetMethod("ReadCostume")!;
@@ -194,6 +240,10 @@ public sealed class IdeTests
         Assert.AreEqual(1, dark);
         Assert.IsTrue((bool)typeof(MainForm).GetField("_titleThemeApplied", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(form)!,
             "Windows must accept the custom caption and text colors.");
+        Assert.AreEqual(Color.FromArgb(17, 17, 19).ToArgb(), status.BackColor.ToArgb());
+        object theme = typeof(MainForm).GetField("_theme", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(form)!;
+        Assert.AreEqual(Color.FromArgb(149, 0, 0), theme.GetType().GetProperty("Accent")!.GetValue(theme));
+        Assert.AreEqual(Color.FromArgb(11, 11, 13), theme.GetType().GetProperty("Background")!.GetValue(theme));
     });
     [TestMethod]
     public void MultiMegabyteArchiveLoadsAndHighlightsWithAnActiveMessageLoop() => OnUiThread(() =>
@@ -232,6 +282,14 @@ public sealed class IdeTests
             return editor.SelectionColor.ToArgb() == ColorTranslator.FromHtml(ScratchCategoryColors.Events).ToArgb();
         });
         Assert.IsGreaterThan(0, ticks);
+        Assert.IsFalse((bool)typeof(MainForm).GetField("_analysisRunning", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(form)!,
+            "Large files must not continuously compile in the background.");
+        Assert.IsTrue(Descendants(form).OfType<RichTextBox>().Any(control => control.Text.Contains("Full live checks are paused", StringComparison.Ordinal)));
+        Assert.IsGreaterThan(0, Descendants(form).OfType<TreeView>().Single().Nodes.Count);
+        var typing = System.Diagnostics.Stopwatch.StartNew();
+        editor.Select(editor.TextLength, 0);
+        editor.SelectedText = "\n# edit";
+        Assert.IsTrue(typing.Elapsed < TimeSpan.FromSeconds(2), $"Editing a large buffer took {typing.Elapsed}.");
     });
     [TestMethod]
     public void AddSpriteButtonAndAssetUndoKeepTheSourceAndProjectTogether() => OnUiThread(() =>

@@ -141,7 +141,8 @@ public sealed partial class MainForm
         _renderingPreview = true;
         try
         {
-            Bitmap bitmap = await Task.Run(() => StagePreview.Render(document, selected));
+            Color accent = _theme.Accent;
+            Bitmap bitmap = await Task.Run(() => StagePreview.Render(document, selected, accent));
             if (IsDisposed || document != _previewDocument || selected != _sprites.SelectedIndex) bitmap.Dispose();
             else _preview?.SetImage(bitmap);
         }
@@ -156,11 +157,16 @@ public sealed partial class MainForm
     private void UpdateAssets()
     {
         _soundOutput?.Stop();
-        _assets.Items.Clear();
-        if (_previewDocument is null || _sprites.SelectedIndex < 0) return;
-        foreach (JsonNode? asset in _previewDocument.Project["targets"]![_sprites.SelectedIndex]![_showSounds ? "sounds" : "costumes"]!.AsArray())
-            _assets.Items.Add(asset?["name"]?.ToString() ?? "Asset");
-        if (_assets.Items.Count > 0) _assets.SelectedIndex = 0;
+        _assets.BeginUpdate();
+        try
+        {
+            _assets.Items.Clear();
+            if (_previewDocument is null || _sprites.SelectedIndex < 0) return;
+            foreach (JsonNode? asset in _previewDocument.Project["targets"]![_sprites.SelectedIndex]![_showSounds ? "sounds" : "costumes"]!.AsArray())
+                _assets.Items.Add(asset?["name"]?.ToString() ?? "Asset");
+            if (_assets.Items.Count > 0) _assets.SelectedIndex = 0;
+        }
+        finally { _assets.EndUpdate(); }
     }
     private async Task ChangeProjectAsync(Func<ScratchProjectDocument, int> change)
     {

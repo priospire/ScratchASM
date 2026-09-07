@@ -61,6 +61,7 @@ public sealed class ScratchProjectConverter
             }
 
             using ScratchInputPackage package = ScratchInputPackage.Open(inputPath, options.AttemptSafeRepair);
+            if (package.PerformanceWarning is not null) issues.Add(package.PerformanceWarning);
             if (package.SourceFilePath is not null &&
                 string.Equals(Path.GetFullPath(package.SourceFilePath), fullOutputPath, StringComparison.OrdinalIgnoreCase))
             {
@@ -131,7 +132,8 @@ public sealed class ScratchProjectConverter
                 return Failure(issues);
             }
 
-            WriteSb3(package, assetReferences, fullOutputPath, options.Overwrite);
+            WriteSb3(package, assetReferences, fullOutputPath, options.Overwrite,
+                options.AttemptSafeRepair ? ["imported", "repaired", "exported"] : ["imported", "exported"]);
             return new ConversionResult
             {
                 Success = true,
@@ -215,7 +217,7 @@ public sealed class ScratchProjectConverter
             return Failure(issues);
         }
 
-        WriteSb3(package, assetReferences, fullOutputPath, options.Overwrite);
+        WriteSb3(package, assetReferences, fullOutputPath, options.Overwrite, ["compiled", "exported"]);
         return new ConversionResult
         {
             Success = true,
@@ -286,7 +288,8 @@ public sealed class ScratchProjectConverter
         ScratchInputPackage package,
         IReadOnlyList<ScratchAssetReference> assetReferences,
         string outputPath,
-        bool overwrite)
+        bool overwrite,
+        string[] operations)
     {
         string? outputDirectory = Path.GetDirectoryName(outputPath);
         if (!string.IsNullOrEmpty(outputDirectory))
@@ -307,25 +310,14 @@ public sealed class ScratchProjectConverter
         {
             using (ZipArchive output = ZipFile.Open(tempPath, ZipArchiveMode.Create))
             {
-                ZipArchiveEntry projectEntry = output.CreateEntry("project.json", CompressionLevel.Optimal);
-                using (Stream projectStream = projectEntry.Open())
+                using ScratchProvenance.ArchiveHash hash = new();
+                hash.WriteEntry(output, "project.json", package.ProjectJsonBytes);
+                foreach (string name in assetReferences.Select(asset => asset.FileName).Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal))
                 {
-                    projectStream.Write(package.ProjectJsonBytes);
+                    using Stream assetInput = package.OpenAsset(name);
+                    hash.WriteEntry(output, name, assetInput.Length, assetInput.CopyTo);
                 }
-
-                HashSet<string> writtenAssets = new(StringComparer.Ordinal);
-                foreach (ScratchAssetReference assetReference in assetReferences)
-                {
-                    if (!writtenAssets.Add(assetReference.FileName))
-                    {
-                        continue;
-                    }
-
-                    ZipArchiveEntry assetEntry = output.CreateEntry(assetReference.FileName, CompressionLevel.Optimal);
-                    using Stream assetInput = package.OpenAsset(assetReference.FileName);
-                    using Stream assetOutput = assetEntry.Open();
-                    assetInput.CopyTo(assetOutput);
-                }
+                output.Comment = ScratchProvenance.ArchiveComment(hash.Finish(), operations);
             }
 
             File.Move(tempPath, outputPath, overwrite);

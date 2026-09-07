@@ -115,7 +115,7 @@ public static class ScratchAsmCatalogExporter
 
         string scratchAsmPath = Path.Combine(fullDirectory, ScratchAsmFileName);
         string jsonPath = Path.Combine(fullDirectory, JsonFileName);
-        File.WriteAllText(scratchAsmPath, GenerateScratchAsm(), new UTF8Encoding(false));
+        ScratchProjectEditSession.WriteSourceFile(scratchAsmPath, ScratchProvenance.StampSource(GenerateScratchAsm(), "generated"), true);
         File.WriteAllText(jsonPath, GenerateJson(), new UTF8Encoding(false));
         return [scratchAsmPath, jsonPath];
     }

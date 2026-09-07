@@ -7,8 +7,17 @@ text, editor font size, and animations. Reset colors restores the defaults.
 Dark mode includes the title bar, footer, menus, and native scrollbars where
 Windows supports them. Scratch block syntax keeps the original category colors.
 
-The editor colors visible text first and checks source in the background.
-Large files remain editable while diagnostics are being calculated.
+The editor colors visible text first. Above 1 MiB of source, full automatic
+checks pause to avoid recompiling the whole project after each edit. Use
+Tools > Check source for a full background check. Edited exports always validate.
+Target navigation and visible-text highlighting remain available.
+
+Large archives show a performance warning, not an entry-count error. Assets stay
+in a compressed disk snapshot and load only when needed. Automatic stage preview
+is deferred; use Refresh preview when you need it. This avoids decoding thousands
+of images during opening. Source and companion saves also run in the background.
+Very large JSON can still take time to parse and load; no unlimited-size or
+zero-lag guarantee is possible.
 
 ## TurboWarp extensions
 
@@ -80,6 +89,20 @@ Supported extension workaround:
   shift with literal signed 32-bit integer operands. These become native Scratch
   arithmetic with the same numeric result.
 
+This is not a converter for the whole gallery. A gallery listing means the IDE
+can preserve that extension's metadata and blocks, not emulate its JavaScript.
+The official [TurboWarp gallery](https://extensions.turbowarp.org/) includes
+network, filesystem, clipboard, and device APIs that Scratch does not expose.
+Those capabilities cannot be preserved by substituting ordinary Scratch blocks.
+
+The Bitwise workaround requires the official bitwise.js URL, exact literal
+inputs, and no custom mutation, fields, control-flow links, or extension monitors.
+Its seven operations are checked against JavaScript's bitwise results in the
+Scratch VM, using signed integer extremes, shift-count boundaries, and seeded
+cases. Every bundled gallery declaration is also tested to remain blocked unless
+an implemented workaround removes its dependency. This is regression coverage,
+not proof of every program, branch, or future extension version.
+
 Variable operands, other Bitwise operations, and other extension blocks are
 reported as unsupported. Runtime-setting changes also require manual review.
 Network access, files, video, and similar capabilities cannot generally be
@@ -88,6 +111,34 @@ reproduced by vanilla Scratch.
 If compaction still leaves more than 5 MiB, the tool stops without deleting data.
 No tool can guarantee that an arbitrarily large project fits without changing it.
 Your input and its asset companion are never overwritten.
+
+## Provenance inspection
+
+Exports now record ScratchASM use without adding visible Scratch blocks:
+
+- `.sb3`: a ZIP archive comment starting with `ScratchASM-Provenance: `.
+- Saved/generated source: a leading `# ScratchASM-Provenance: ` comment.
+
+Run `ScratchASM.exe --provenance project.sb3` or
+`ScratchASM.exe --provenance main.sasm`. The JSON report says whether a marker
+is present, whether it is recognized, and whether its content hash still matches.
+You can also read the comments directly. Normal import never changes the input
+file; its marker appears in the displayed source and subsequent saved outputs.
+
+The record contains a schema number, tool name, operation labels, and SHA-256.
+There are no user names, machine identifiers, paths, or network calls. Labels
+describe recorded operations, not a complete historical audit trail.
+Archive hashes include every entry's name, size, and uncompressed bytes, including
+extra assets; compression, timestamps, entry order, and the ZIP comment itself
+are excluded. Source hashes cover UTF-8 text without the leading marker or BOM;
+line-ending changes count as edits. Source inspection does not verify its asset
+companion: inspect that `.sb3` separately.
+
+These are self-declared markers, not signatures or tamper-proof watermarks.
+They can be removed or forged. A Scratch/TurboWarp resave may remove the ZIP
+comment, and old files may have no marker. No marker does not prove the tool
+was never used. Verification streams all assets and can take time on huge files;
+it is not performed automatically while opening or typing.
 
 ## Import limits
 

@@ -74,7 +74,17 @@ An unchanged source round trip retains the original `project.json` and every arc
 
 The converter validates readable JSON, field types, graph references, data references, required assets, and archive paths before writing output. Safe relative ZIP metadata folders are preserved during source round trips; assets referenced by Scratch still use root filenames. Duplicate ZIP entries, path traversal, malformed JSON, and cyclic graphs remain errors. Output writes use a temporary file followed by a move, so failed validation does not replace an existing output.
 
-Current limits are 4,096 archive entries, 128 MiB per entry, 512 MiB total expanded archive data, 64 MiB of source text, and 128 nested source delimiters. Large or structurally unusual targets use exact block form. Repair cannot reconstruct lost media or infer the intended behavior of ambiguous damaged code.
+There is no fixed entry-count or total-expanded-size limit for .sb3 archives.
+Imports keep a private compressed snapshot on disk and load media on demand.
+Exports stream assets one at a time, including assets larger than 128 MiB.
+You need enough free temporary disk space for the compressed snapshot.
+
+The in-memory project.json safety limit is 128 MiB. Operations that request an
+individual asset as a byte array retain a 128 MiB bound; this does not block
+opening or streaming that asset through an archive export. Compiling edited
+source is limited to 64 MiB and 128 nested delimiters. These are resource safeguards,
+not Scratch upload limits. Large or structurally unusual targets use exact block
+form. Repair cannot reconstruct lost media or infer ambiguous damaged code.
 
 ## Verification
 

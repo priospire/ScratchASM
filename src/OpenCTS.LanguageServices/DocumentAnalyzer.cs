@@ -14,7 +14,8 @@ public sealed class DocumentAnalyzer
             diagnostic.Message,
             sourceName,
             new ScratchAsmTextRange(diagnostic.Span.Start, diagnostic.Span.End))).ToList();
-        CtsCompilationUnit unit = CtsParser.Parse(source).CompilationUnit;
+        CtsCompilationUnit unit = source.Length <= 64 * 1024 * 1024 ? CtsParser.Parse(source).CompilationUnit :
+            new CtsCompilationUnit([], new SourceSpan(new SourceLocation(1, 1), new SourceLocation(1, 1)));
         CtsRawBlocksDeclaration? raw = unit.Targets.SelectMany(target => target.Members).OfType<CtsRawBlocksDeclaration>().FirstOrDefault();
         if (raw is not null)
             diagnostics.Add(new StructuredDiagnostic("SASM5001", "info",

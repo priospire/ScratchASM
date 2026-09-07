@@ -22,6 +22,9 @@ public sealed partial class MainForm : Form
     private bool _isBusy;
     private int _diagnosticsVersion;
     private int _fullyColoredVersion = -1;
+    private const int AutomaticAnalysisLimit = 1024 * 1024;
+    private bool _checkRequested;
+    private string? _performanceWarning;
 
     public MainForm(string? initialPath = null, bool persistPreferences = true)
     {
@@ -265,9 +268,9 @@ public sealed partial class MainForm : Form
         await RunConversionAsync(forceRepair: true);
     }
 
-    private void SaveSourceButton_Click(object? sender, EventArgs e) => SaveDocument(false);
+    private async void SaveSourceButton_Click(object? sender, EventArgs e) => await SaveDocumentAsync(false);
 
-    private bool SaveDocument(bool saveAs)
+    private async Task<bool> SaveDocumentAsync(bool saveAs)
     {
         if (_isBusy || _sourceEditor.ReadOnly) return false;
         string? path = IsScratchAsmPath(_loadedPath ?? "") ? _loadedPath : null;
@@ -282,15 +285,21 @@ public sealed partial class MainForm : Form
             if (dialog.ShowDialog(this) != DialogResult.OK) return false;
             path = dialog.FileName;
         }
+        string source = _sourceEditor.Text;
+        ScratchProjectEditSession? session = _editSession;
+        SetBusy(true);
+        SetStatus("Saving source and asset companion...", _theme.Muted);
         try
         {
-            if (_editSession is not null)
+            if (session is not null)
             {
-                ConversionResult result = _editSession.SaveSource(_sourceEditor.Text, path, true);
+                ConversionResult result = await Task.Run(() => session.SaveSource(source, path, true));
+                if (IsDisposed) return false;
                 if (!result.Success) { ShowIssues(result.Issues, "Source save failed.", _theme.Error); return false; }
-                ReplaceEditorText(File.ReadAllText(path));
             }
-            else ScratchProjectEditSession.WriteSourceFile(path, _sourceEditor.Text, true);
+            else await Task.Run(() => ScratchProjectEditSession.WriteSourceFile(path, source, true));
+            if (IsDisposed) return false;
+            _sourceEditor.UpdateSavedSourceText(await File.ReadAllTextAsync(path));
             _loadedPath = Path.GetFullPath(path);
             _editSessionPath = _editSession is null ? null : _loadedPath;
             _inputPathTextBox.Text = _loadedPath;
@@ -300,6 +309,7 @@ public sealed partial class MainForm : Form
             return true;
         }
         catch (Exception ex) when (IsDocumentError(ex)) { SetStatus(ex.Message, _theme.Error); return false; }
+        finally { if (!IsDisposed) { SetBusy(false); ScheduleDiagnostics(); } }
     }
 
     private async Task RunConversionAsync(bool forceRepair)
@@ -441,8 +451,10 @@ public sealed partial class MainForm : Form
     private async Task<bool> LoadDocumentAsync(string inputPath)
     {
         if (_isBusy || SameDocument(inputPath, _loadedPath)) return !_isBusy;
-        if (!ConfirmUnsaved()) { _inputPathTextBox.Text = _loadedPath ?? ""; return false; }
+        if (!await ConfirmUnsavedAsync()) { _inputPathTextBox.Text = _loadedPath ?? ""; return false; }
         SetBusy(true);
+        _performanceWarning = null;
+        _checkRequested = false;
         _diagnosticsVersion++;
         _diagnosticsTimer.Stop();
         try
@@ -462,7 +474,13 @@ public sealed partial class MainForm : Form
             {
                 try
                 {
-                    session = await Task.Run(() => ScratchProjectEditSession.Open(fullPath));
+                    var progress = new Progress<ScratchLoadProgress>(update =>
+                    {
+                        if (IsDisposed) return;
+                        if (update.IsLargeProject) _performanceWarning = update.Message;
+                        SetStatus(update.Message, update.IsLargeProject ? _theme.Warning : _theme.Muted);
+                    });
+                    session = await Task.Run(() => ScratchProjectEditSession.Open(fullPath, progress));
                     text = session.SourceText;
                     issues.AddRange(session.Issues);
                 }
@@ -481,10 +499,23 @@ public sealed partial class MainForm : Form
             _outputPathTextBox.Clear();
             SetDefaultOutputPath(fullPath);
             _outline.Nodes.Clear();
+            if (text.Length > AutomaticAnalysisLimit)
+            {
+                var targets = await Task.Run(() => OpenCTS.LanguageServices.SymbolIndex.CreateTargetOutline(text));
+                if (IsDisposed) return false;
+                UpdateOutline(targets);
+            }
             UpdateDocumentTitle();
             if (issues.Count > 0) ShowIssues(issues, "Input diagnostics", _theme.Warning);
             else SetStatus($"Opened {Path.GetFileName(fullPath)}", _theme.Success);
-            _ = RefreshProjectAsync();
+            _performanceWarning = session?.Issues.FirstOrDefault(issue => issue.Code == "SASM4005")?.Message ?? _performanceWarning;
+            if (_performanceWarning is null && text.Length <= AutomaticAnalysisLimit) _ = RefreshProjectAsync();
+            else
+            {
+                _previewDocument = null;
+                _sprites.Items.Clear(); _assets.Items.Clear(); _preview?.SetImage(null);
+                _projectSummary.Text = "Large project. Preview deferred.";
+            }
             return true;
         }
         catch (Exception ex) when (IsDocumentError(ex))
@@ -533,6 +564,11 @@ public sealed partial class MainForm : Form
 
         if (!_isBusy)
         {
+            if (_sourceEditor.TextLength > AutomaticAnalysisLimit && !_checkRequested)
+            {
+                SetStatus(LargeProjectNotice, _theme.Warning);
+                return;
+            }
             _diagnosticsTimer.Start();
         }
     }
@@ -543,15 +579,19 @@ public sealed partial class MainForm : Form
         if (_isBusy || _packageOnly) return;
         if (_analysisRunning) { _diagnosticsTimer.Start(); return; }
         _analysisRunning = true;
+        _checkRequested = false;
         int version = _diagnosticsVersion;
         string source = _sourceEditor.Text;
         string name = IsScratchAsmPath(_loadedPath ?? "") ? _loadedPath! : "editor.sasm";
         try
         {
-            var colors = await Task.Run(() => CtsSyntaxClassifier.Classify(source));
-            if (IsDisposed || version != _diagnosticsVersion || _isBusy) return;
-            _sourceEditor.ApplyColors(colors, _theme.EditorText, _theme.Muted, _theme.IsDark);
-            _fullyColoredVersion = version;
+            if (source.Length <= AutomaticAnalysisLimit)
+            {
+                var colors = await Task.Run(() => CtsSyntaxClassifier.Classify(source));
+                if (IsDisposed || version != _diagnosticsVersion || _isBusy) return;
+                _sourceEditor.ApplyColors(colors, _theme.EditorText, _theme.Muted, _theme.IsDark);
+                _fullyColoredVersion = version;
+            }
             _activity.Text = "Checking source...";
             var analysis = await Task.Run(() => new OpenCTS.LanguageServices.DocumentAnalyzer().Analyze(source, name, includeColors: false));
             if (IsDisposed || version != _diagnosticsVersion || _isBusy) return;
@@ -573,6 +613,7 @@ public sealed partial class MainForm : Form
         if (diagnostics.Count == 0)
         {
             AppendStatusLine("No ScratchASM diagnostics.", _theme.Success, null);
+            if (_performanceWarning is not null || _sourceEditor.TextLength > AutomaticAnalysisLimit) AppendStatusLine(LargeProjectNotice, _theme.Warning, null);
             return;
         }
 
@@ -584,6 +625,17 @@ public sealed partial class MainForm : Form
 
         _statusTextBox.Select(0, 0);
         if (diagnostics.Count > 200) AppendStatusLine($"{diagnostics.Count - 200} more diagnostics. Fix the first errors and check again.", _theme.Muted, null);
+        if (_performanceWarning is not null || _sourceEditor.TextLength > AutomaticAnalysisLimit) AppendStatusLine(LargeProjectNotice, _theme.Warning, null);
+    }
+
+    private string LargeProjectNotice => (_performanceWarning ?? "Large source: loading and checking may take longer; editing may lag.") +
+        (_sourceEditor.TextLength > AutomaticAnalysisLimit ? "\nFull live checks are paused. Check source on demand; edited exports are always validated. Viewport highlighting stays on." : "");
+
+    private void CheckSource()
+    {
+        if (_isBusy || _packageOnly) return;
+        _checkRequested = true;
+        ScheduleDiagnostics();
     }
 
     private void ShowIssues(IReadOnlyList<ValidationIssue> issues, string header, Color headerColor)
@@ -799,16 +851,16 @@ public sealed partial class MainForm : Form
     {
         public static UiTheme Dark { get; } = new(
             true,
-            Color.FromArgb(12, 12, 14),
-            Color.FromArgb(21, 21, 24),
+            Color.FromArgb(11, 11, 13),
+            Color.FromArgb(17, 17, 19),
             Color.FromArgb(17, 17, 20),
             Color.FromArgb(14, 14, 16),
-            Color.FromArgb(16, 16, 19),
+            Color.FromArgb(17, 17, 19),
             Color.FromArgb(229, 234, 242),
             Color.FromArgb(229, 234, 242),
             Color.FromArgb(149, 160, 177),
-            Color.FromArgb(0, 156, 168),
-            Color.FromArgb(0, 116, 126),
+            Color.FromArgb(149, 0, 0),
+            Color.FromArgb(110, 0, 0),
             Color.FromArgb(34, 197, 94),
             Color.FromArgb(245, 158, 11),
             Color.FromArgb(239, 68, 68));
@@ -823,8 +875,8 @@ public sealed partial class MainForm : Form
             Color.FromArgb(24, 31, 42),
             Color.FromArgb(24, 31, 42),
             Color.FromArgb(96, 108, 124),
-            Color.FromArgb(31, 117, 84),
-            Color.FromArgb(26, 94, 69),
+            Color.FromArgb(149, 0, 0),
+            Color.FromArgb(110, 0, 0),
             Color.FromArgb(22, 163, 74),
             Color.FromArgb(202, 138, 4),
             Color.FromArgb(220, 38, 38));

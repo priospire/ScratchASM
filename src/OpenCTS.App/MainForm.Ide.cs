@@ -21,6 +21,7 @@ public sealed partial class MainForm
     private string _savedText = "";
     private bool _packageOnly;
     private bool _analysisRunning;
+    private bool _closeApproved;
     private readonly bool _persistPreferences;
     private bool IsDirty => !_packageOnly && _sourceEditor.Text != _savedText;
     private static string PreferencesPath => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "ScratchASM", "preferences.json");
@@ -35,13 +36,14 @@ public sealed partial class MainForm
             button.Click += action;
             _ideTools.Items.Add(button);
         }
-        Tool("New", "\uE8A5", "New source (Ctrl+N)", (_, _) => { if (ConfirmUnsaved()) NewDocument(); });
+        Tool("New", "\uE8A5", "New source (Ctrl+N)", async (_, _) => await NewDocumentAsync());
         Tool("Open", "\uE8E5", "Open source or Scratch project (Ctrl+O)", BrowseInputFile);
         Tool("Save", "\uE74E", "Save source (Ctrl+S)", SaveSourceButton_Click);
-        Tool("Save as", "\uE792", "Save source as (Ctrl+Shift+S)", (_, _) => SaveDocument(true));
+        Tool("Save as", "\uE792", "Save source as (Ctrl+Shift+S)", async (_, _) => await SaveDocumentAsync(true));
         _ideTools.Items.Add(new ToolStripSeparator());
         Tool("Export .sb3", "\uE768", "Export Scratch project (F5)", ConvertButton_Click);
         Tool("Repair", "\uE90F", "Attempt repair and export", RepairButton_Click);
+        Tool("", "\uE73E", "Check source", (_, _) => CheckSource());
         _ideTools.Items.Add(new ToolStripSeparator());
         Tool("", "\uE7A7", "Undo (Ctrl+Z)", (_, _) => _sourceEditor.Undo());
         Tool("", "\uE7A6", "Redo (Ctrl+Y)", (_, _) => _sourceEditor.Redo());
@@ -50,6 +52,7 @@ public sealed partial class MainForm
         Tool("Guide", "\uE82D", "Language guide (F1)", (_, _) => ShowGuide());
         ToolStripDropDownButton utilities = new("Tools") { Image = MakeGlyph("\uE713") };
         utilities.DropDownItems.Add("Compact / Optimize...", null, async (_, _) => await RunProjectToolAsync(false));
+        utilities.DropDownItems.Add("Check source", null, (_, _) => CheckSource());
         utilities.DropDownItems.Add("Export vanilla Scratch...", null, async (_, _) => await RunProjectToolAsync(true));
         utilities.DropDownItems.Add("TurboWarp extensions...", null, (_, _) => ShowExtensions());
         utilities.DropDownItems.Add("Undo last asset change", null, (_, _) => UndoAssetChange());
@@ -148,12 +151,21 @@ public sealed partial class MainForm
         _outline.ContextMenuStrip.Items.Add("Expand all", null, (_, _) => _outline.ExpandAll());
         DragEnter += (_, e) => e.Effect = !_isBusy && e.Data?.GetDataPresent(DataFormats.FileDrop) == true ? DragDropEffects.Copy : DragDropEffects.None;
         DragDrop += (_, e) => { if (e.Data?.GetData(DataFormats.FileDrop) is string[] { Length: 1 } files) LoadInputPreview(files[0]); };
-        FormClosing += (_, e) => { if (_isBusy || !ConfirmUnsaved()) e.Cancel = true; };
+        FormClosing += async (_, e) =>
+        {
+            if (_closeApproved) return;
+            if (_isBusy) { e.Cancel = true; return; }
+            if (!IsDirty) return;
+            e.Cancel = true;
+            if (await ConfirmUnsavedAsync() && !IsDisposed) { _closeApproved = true; BeginInvoke(Close); }
+        };
         NewDocument();
     }
 
     private void NewDocument()
     {
+        _performanceWarning = null;
+        _checkRequested = false;
         _assetUndo = null;
         _loadedPath = null;
         _editSession = null;
@@ -172,11 +184,13 @@ public sealed partial class MainForm
         UpdateDocumentTitle();
         if (Visible) _ = RefreshProjectAsync();
     }
-    private bool ConfirmUnsaved()
+    private async Task NewDocumentAsync() { if (!_isBusy && await ConfirmUnsavedAsync()) NewDocument(); }
+
+    private async Task<bool> ConfirmUnsavedAsync()
     {
         if (!IsDirty) return true;
         DialogResult choice = MessageBox.Show(this, "Save changes to the current source?", "Unsaved changes", MessageBoxButtons.YesNoCancel, MessageBoxIcon.Question);
-        return choice == DialogResult.No || choice == DialogResult.Yes && SaveDocument(false);
+        return choice == DialogResult.No || choice == DialogResult.Yes && await SaveDocumentAsync(false);
     }
     private void UpdateDocumentTitle()
     {
@@ -231,10 +245,10 @@ public sealed partial class MainForm
         {
             switch (keyData)
             {
-                case Keys.Control | Keys.N: if (ConfirmUnsaved()) NewDocument(); return true;
+                case Keys.Control | Keys.N: _ = NewDocumentAsync(); return true;
                 case Keys.Control | Keys.O: BrowseInputFile(null, EventArgs.Empty); return true;
-                case Keys.Control | Keys.S: SaveDocument(false); return true;
-                case Keys.Control | Keys.Shift | Keys.S: SaveDocument(true); return true;
+                case Keys.Control | Keys.S: _ = SaveDocumentAsync(false); return true;
+                case Keys.Control | Keys.Shift | Keys.S: _ = SaveDocumentAsync(true); return true;
                 case Keys.Control | Keys.F: ShowFind(); return true;
                 case Keys.F3: FindNext(false); return true;
                 case Keys.Shift | Keys.F3: FindNext(true); return true;

@@ -83,7 +83,7 @@ public sealed partial class MainForm
         if (_progress is not null) { _progress.BackColor = _theme.Background; _progress.ForeColor = _theme.Accent; }
         float size = Math.Clamp(_preferences.FontSize, 9, 22);
         if (_sourceEditor.Font.Size != size) { Font old = _sourceEditor.Font; _sourceEditor.Font = CreateMonoFont(size); old.Dispose(); }
-        _documentLabel.ForeColor = _theme.Accent;
+        _documentLabel.ForeColor = _theme.Text;
     }
     private void ShowAppearance()
     {

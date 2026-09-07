@@ -91,6 +91,51 @@ public sealed partial class CodeEditor : RichTextBox
         base.OnSelectionChanged(e);
     }
     public void ResetHistory() { _undo.Clear(); _redo.Clear(); ClearUndo(); _previousText = Text; _previousCaret = SelectionStart; }
+    public void UpdateSavedSourceText(string source)
+    {
+        source = source.Replace("\r\n", "\n", StringComparison.Ordinal).Replace('\r', '\n');
+        string previous = Text;
+        if (source == previous) return;
+        int previousEnd = previous.Length, sourceEnd = source.Length;
+        while (previousEnd > 0 && char.IsWhiteSpace(previous[previousEnd - 1])) previousEnd--;
+        while (sourceEnd > 0 && char.IsWhiteSpace(source[sourceEnd - 1])) sourceEnd--;
+        int prefix = 0, suffix = 0;
+        while (prefix < Math.Min(previousEnd, sourceEnd) && previous[prefix] == source[prefix]) prefix++;
+        while (suffix < Math.Min(previousEnd, sourceEnd) - prefix && previous[previousEnd - suffix - 1] == source[sourceEnd - suffix - 1]) suffix++;
+        int start = SelectionStart, end = start + SelectionLength;
+        int Map(int offset) => offset >= previousEnd ? sourceEnd + Math.Min(offset - previousEnd, source.Length - sourceEnd)
+            : offset < prefix ? offset : offset >= previousEnd - suffix ? offset + sourceEnd - previousEnd : sourceEnd - suffix;
+        NativePoint scroll = default;
+        if (IsHandleCreated) SendPoint(Handle, 0x04DD, IntPtr.Zero, ref scroll);
+        _restoring = true;
+        if (IsHandleCreated) Send(Handle, 0x000B, IntPtr.Zero, IntPtr.Zero);
+        try
+        {
+            // Save may change the header and normalize the final newline, while the code between stays intact.
+            if (!previous.AsSpan(previousEnd).SequenceEqual(source.AsSpan(sourceEnd)))
+            {
+                Select(previousEnd, previous.Length - previousEnd);
+                SelectedText = source[sourceEnd..];
+            }
+            if (prefix + suffix < previousEnd || prefix + suffix < sourceEnd)
+            {
+                Select(prefix, previousEnd - prefix - suffix);
+                SelectedText = source.Substring(prefix, sourceEnd - prefix - suffix);
+            }
+            Select(Map(start), Math.Max(0, Map(end) - Map(start)));
+            ClearUndo();
+        }
+        finally
+        {
+            _restoring = false;
+            if (IsHandleCreated)
+            {
+                SendPoint(Handle, 0x04DE, IntPtr.Zero, ref scroll);
+                Send(Handle, 0x000B, new IntPtr(1), IntPtr.Zero);
+                Invalidate();
+            }
+        }
+    }
     public void LoadSourceText(string source)
     {
         _coloring = true;
@@ -169,7 +214,8 @@ public sealed partial class CodeEditor : RichTextBox
         int start = GetCharIndexFromPosition(Point.Empty);
         int end = GetCharIndexFromPosition(new Point(ClientSize.Width, ClientSize.Height));
         int first = GetFirstCharIndexFromLine(GetLineFromCharIndex(start));
-        return (Math.Max(0, first), Math.Min(TextLength - Math.Max(0, first), Math.Max(0, end - Math.Max(0, first)) + 512));
+        int from = Math.Max(Math.Max(0, first), start - 256);
+        return (from, Math.Min(TextLength - from, Math.Min(20000, Math.Max(0, end - from) + 512)));
     }
     private void PaintViewport()
     {

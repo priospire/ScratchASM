@@ -5,7 +5,10 @@ namespace OpenCTS.Core;
 internal sealed record ScratchArchiveSnapshot(
     string SourcePath,
     JsonObject Project,
-    IReadOnlyDictionary<string, byte[]> Entries);
+    IReadOnlyDictionary<string, byte[]> Entries)
+{
+    public ValidationIssue? PerformanceWarning { get; init; }
+}
 
 internal sealed record ScratchDataOrigin(string Alias, string Id, string Name);
 
@@ -33,4 +36,3 @@ internal sealed record ScratchProjectDecompilation(
     string SourceText,
     IReadOnlyList<ValidationIssue> Issues,
     ScratchAsmOriginMap OriginMap);
-

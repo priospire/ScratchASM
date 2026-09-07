@@ -71,6 +71,7 @@ public static class ScratchCompatibility
                         output.Project["extensionURLs"]?["Bitwise"]?.ToString() != "https://extensions.turbowarp.org/bitwise.js" ||
                         block["mutation"] is not null || block["fields"] is JsonObject { Count: > 0 }) continue;
                     bool unary = opcode == "Bitwise_bitwiseNot";
+                    if (inputs.Count != (unary ? 1 : 2) || block["next"] is not null) continue;
                     if (!Literal(inputs[unary ? "CENTRAL" : "LEFT"], out double left) || !Int32Value(left) ||
                         !unary && (!Literal(inputs["RIGHT"], out double rightValue) || !Int32Value(rightValue))) continue;
                     int a = (int)left;
@@ -107,6 +108,7 @@ public static class ScratchCompatibility
                 foreach ((string id, JsonNode? node) in blocks.ToArray())
                 {
                     if (node is not JsonObject block || block["inputs"] is not JsonObject inputs || block["parent"] is not JsonValue parentId ||
+                        inputs.Count != 2 || block["mutation"] is not null || block["next"] is not null ||
                         block["comment"] is not null || (target["comments"] as JsonObject ?? []).Any(pair => pair.Value?["blockId"]?.ToString() == id) ||
                         (output.Project["monitors"] as JsonArray ?? []).Any(monitor => monitor?["id"]?.ToString() == id)) continue;
                     if (!Literal(inputs["NUM1"], out double a) || !Literal(inputs["NUM2"], out double b)) continue;

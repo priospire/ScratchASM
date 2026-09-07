@@ -8,14 +8,15 @@ namespace OpenCTS.Core;
 public sealed class ScratchProjectDocument
 {
     public JsonObject Project { get; }
-    public Dictionary<string, byte[]> Assets { get; }
+    public ScratchAssetCollection Assets { get; }
     public bool Compact { get; set; }
     public byte[] JsonBytes => JsonSerializer.SerializeToUtf8Bytes(Project, new JsonSerializerOptions { WriteIndented = !Compact });
 
     public ScratchProjectDocument(JsonObject project, IReadOnlyDictionary<string, byte[]> assets)
     {
         Project = project.DeepClone().AsObject();
-        Assets = assets.Where(pair => pair.Key != "project.json").ToDictionary(pair => pair.Key, pair => pair.Value, StringComparer.Ordinal);
+        Assets = new ScratchAssetCollection(assets);
+        Assets.Remove("project.json");
     }
     public static ScratchProjectDocument Compile(string source)
     {

@@ -6,7 +6,8 @@ using System.Text.Json.Nodes;
 
 namespace OpenCTS.Core;
 
-internal sealed record ScratchMergeOutput(JsonObject Project, IReadOnlyDictionary<string, byte[]> Entries, byte[]? OriginalProjectBytes = null);
+internal sealed record ScratchMergeOutput(JsonObject Project, IReadOnlyDictionary<string, byte[]> Entries,
+    byte[]? OriginalProjectBytes = null, string[]? Operations = null);
 
 internal static class ScratchProjectMerger
 {
@@ -127,9 +128,8 @@ internal static class ScratchProjectMerger
         };
         merged["meta"] = meta;
 
-        Dictionary<string, byte[]> entries = baseline.Entries
-            .Where(static pair => pair.Key != "project.json")
-            .ToDictionary(static pair => pair.Key, static pair => pair.Value, StringComparer.Ordinal);
+        ScratchAssetCollection entries = new(baseline.Entries);
+        entries.Remove("project.json");
         HashSet<string> referencedAssets = outputTargets.OfType<JsonObject>()
             .SelectMany(target => (target["costumes"] as JsonArray ?? []).Concat(target["sounds"] as JsonArray ?? []))
             .OfType<JsonObject>().Select(asset => NodeString(asset["md5ext"]) ?? "").ToHashSet(StringComparer.Ordinal);
@@ -168,15 +168,19 @@ internal static class ScratchProjectMerger
         {
             using (ZipArchive archive = ZipFile.Open(tempPath, ZipArchiveMode.Create))
             {
-                WriteEntry(archive, "project.json", output.OriginalProjectBytes ?? Encoding.UTF8.GetBytes(output.Project.ToJsonString(new JsonSerializerOptions
+                using ScratchProvenance.ArchiveHash hash = new();
+                hash.WriteEntry(archive, "project.json", output.OriginalProjectBytes ?? Encoding.UTF8.GetBytes(output.Project.ToJsonString(new JsonSerializerOptions
                 {
                     WriteIndented = true
                 })));
-                foreach ((string name, byte[] bytes) in output.Entries.OrderBy(static pair => pair.Key, StringComparer.Ordinal))
+                foreach (string name in output.Entries.Keys.Order(StringComparer.Ordinal))
                 {
                     if (name == "project.json") continue;
-                    WriteEntry(archive, name, bytes);
+                    if (output.Entries is ScratchAssetCollection indexed)
+                        hash.WriteEntry(archive, name, indexed.Length(name), destination => indexed.CopyTo(name, destination));
+                    else hash.WriteEntry(archive, name, output.Entries[name]);
                 }
+                archive.Comment = ScratchProvenance.ArchiveComment(hash.Finish(), output.Operations ?? ["exported"]);
             }
 
             File.Move(tempPath, fullPath, overwrite);
@@ -443,13 +447,6 @@ internal static class ScratchProjectMerger
         }
 
         return new JsonArray(values.Select(static value => (JsonNode?)JsonValue.Create(value)).ToArray());
-    }
-
-    private static void WriteEntry(ZipArchive archive, string name, byte[] bytes)
-    {
-        ZipArchiveEntry entry = archive.CreateEntry(name, CompressionLevel.Optimal);
-        using Stream stream = entry.Open();
-        stream.Write(bytes);
     }
 
     private static string Sha256(byte[] bytes) => Convert.ToHexStringLower(SHA256.HashData(bytes));

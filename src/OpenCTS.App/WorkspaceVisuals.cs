@@ -21,7 +21,7 @@ internal sealed class StagePreview : Control
         e.Graphics.DrawImage(_image, rectangle);
     }
     protected override void Dispose(bool disposing) { if (disposing) _image?.Dispose(); base.Dispose(disposing); }
-    public static Bitmap Render(ScratchProjectDocument document, int selected)
+    public static Bitmap Render(ScratchProjectDocument document, int selected, Color accent)
     {
         Bitmap canvas = new(480, 360);
         using Graphics graphics = Graphics.FromImage(canvas);
@@ -53,7 +53,7 @@ internal sealed class StagePreview : Control
                 graphics.DrawImage(bitmap, rect);
                 if (Array.IndexOf(targets, target) == selected)
                 {
-                    using Pen pen = new(Color.FromArgb(0, 156, 168), Math.Max(1, 1 / Math.Max(0.01f, scale)));
+                    using Pen pen = new(accent, Math.Max(1, 1 / Math.Max(0.01f, scale)));
                     graphics.DrawRectangle(pen, rect.X, rect.Y, rect.Width, rect.Height);
                 }
             }

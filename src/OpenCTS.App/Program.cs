@@ -34,6 +34,18 @@ static class Program
     {
         ConsoleBridge.AttachToParent();
 
+        if (args.Length == 2 && args[0].Equals("--provenance", StringComparison.OrdinalIgnoreCase))
+        {
+            try
+            {
+                Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(ScratchProvenance.Inspect(args[1]),
+                    new System.Text.Json.JsonSerializerOptions { WriteIndented = true, PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase }));
+                return 0;
+            }
+            catch (Exception ex) when (ex is IOException or InvalidDataException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
+            { Console.Error.WriteLine(ex.Message); return 1; }
+        }
+
         if (args.Length == 2 && string.Equals(args[0], "--emit-aliases", StringComparison.OrdinalIgnoreCase))
         {
             try
@@ -92,6 +104,7 @@ static class Program
             Console.Error.WriteLine("Usage: ScratchASM <input .sasm|.mono|.sb3|project.json|folder> <output.sb3>");
             Console.Error.WriteLine("       ScratchASM --repair <input .sasm|.mono|.sb3|project.json|folder> <output.sb3>");
             Console.Error.WriteLine("       ScratchASM --emit-aliases <output-folder>");
+            Console.Error.WriteLine("       ScratchASM --provenance <input.sb3|input.sasm>");
             Console.Error.WriteLine("       ScratchASM [--decompile] <input.sb3> <output.sasm> [--overwrite]");
             Console.Error.WriteLine("       ScratchASM --open <input.sasm|input.sb3>");
             Console.Error.WriteLine("       ScratchASM --optimize|--vanilla <input.sasm|input.sb3> <output.sb3> [--overwrite]");

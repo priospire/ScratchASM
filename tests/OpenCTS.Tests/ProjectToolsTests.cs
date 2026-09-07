@@ -39,6 +39,52 @@ public sealed class ProjectToolsTests
         finally { Directory.Delete(directory, true); }
     }
     [TestMethod]
+    public void NoGalleryDeclarationIsMistakenForAUniversalVanillaWorkaround()
+    {
+        foreach (TurboWarpExtension extension in TurboWarpExtensionCatalog.Entries)
+        {
+            var document = ScratchProjectDocument.Compile($"stage {{\n  extension \"{extension.Id}\" \"{extension.Url}\"\n}}\n");
+            var report = ScratchCompatibility.Optimize(document, true);
+            Assert.IsFalse(report.CanExportVanilla, extension.Name);
+            Assert.IsTrue(JsonNode.DeepEquals(document.Project["extensionURLs"], report.Document.Project["extensionURLs"]));
+        }
+    }
+
+    [TestMethod]
+    public void BitwiseConversionRejectsUnprovenShapesWithoutChangingInput()
+    {
+        const string source = "stage {\n  extension Bitwise \"https://extensions.turbowarp.org/bitwise.js\"\n  var result = 0\n  @greenflag:\n    result = [Bitwise_bitwiseAnd input LEFT=6 input RIGHT=3]\n}\n";
+        Action<ScratchProjectDocument, JsonObject>[] mutations =
+        [
+            (doc, block) => doc.Project["extensionURLs"]!["Bitwise"] = "https://example.com/bitwise.js",
+            (_, block) => block["opcode"] = "Bitwise_unknown",
+            (_, block) => block["mutation"] = new JsonObject(),
+            (_, block) => block["fields"]!["MODE"] = new JsonArray("custom", null),
+            (_, block) => block["inputs"]!["EXTRA"] = new JsonArray(1, new JsonArray(4, 1)),
+            (_, block) => block["inputs"]!.AsObject().Remove("RIGHT"),
+            (_, block) => block["inputs"]!["LEFT"] = new JsonArray(1, new JsonArray(4, 0.5)),
+            (_, block) => block["inputs"]!["LEFT"] = new JsonArray(1, new JsonArray(4, 2147483648d)),
+            (_, block) => block["inputs"]!["RIGHT"] = new JsonArray(1, new JsonArray(4, -2147483649d)),
+            (_, block) => block["inputs"]!["LEFT"] = new JsonArray(1, new JsonArray(10, "6")),
+            (_, block) => block["inputs"]!["LEFT"] = new JsonArray(1, new JsonArray(4, "NaN")),
+            (_, block) => block["inputs"]!["LEFT"] = new JsonArray(1, new JsonArray(4, "Infinity")),
+            (_, block) => block["next"] = "unexpected"
+        ];
+        foreach (var mutate in mutations)
+        {
+            var document = ScratchProjectDocument.Compile(source);
+            JsonObject block = document.Project["targets"]![0]!["blocks"]!.AsObject().Select(pair => pair.Value).OfType<JsonObject>()
+                .Single(item => item["opcode"]?.ToString() == "Bitwise_bitwiseAnd");
+            mutate(document, block);
+            string before = document.Project.ToJsonString();
+            var report = ScratchCompatibility.Optimize(document, true);
+            Assert.IsFalse(report.CanExportVanilla);
+            Assert.AreEqual(before, document.Project.ToJsonString());
+            Assert.AreEqual(before, report.Document.Project.ToJsonString());
+        }
+    }
+
+    [TestMethod]
     public void EveryBundledGalleryEntryCanBeDeclaredAndRoundTripped()
     {
         Assert.IsGreaterThan(100, TurboWarpExtensionCatalog.Entries.Count);

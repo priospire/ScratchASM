@@ -32,6 +32,7 @@ internal sealed class ScratchInputPackage : IDisposable
     public byte[] ProjectJsonBytes { get; private set; }
 
     public string? SourceFilePath { get; }
+    public ValidationIssue? PerformanceWarning { get; private init; }
 
     public static ScratchInputPackage Open(string inputPath, bool requireSafeArchive = false)
     {
@@ -127,7 +128,7 @@ internal sealed class ScratchInputPackage : IDisposable
         {
             if (_zipEntries.TryGetValue(fileName, out ZipArchiveEntry? entry))
             {
-                return entry.Open();
+                return ScratchArchiveResources.OpenEntry(entry);
             }
 
             throw new FileNotFoundException($"Asset is missing from input .sb3: {fileName}", fileName);
@@ -171,25 +172,10 @@ internal sealed class ScratchInputPackage : IDisposable
         {
             zipStream = File.OpenRead(fullInputPath);
             ZipArchive zipArchive = new(zipStream, ZipArchiveMode.Read, leaveOpen: false);
-            Dictionary<string, ZipArchiveEntry> entries = new(StringComparer.Ordinal);
-            if (zipArchive.Entries.Count > 4096) throw new ScratchPackageException("ZIP contains more than 4096 entries.");
-            long totalBytes = 0;
-            foreach (ZipArchiveEntry entry in zipArchive.Entries)
-            {
-                totalBytes += entry.Length;
-                if (entry.Length > 128L * 1024 * 1024 || totalBytes > 512L * 1024 * 1024)
-                    throw new ScratchPackageException("ZIP expands beyond the supported size limit.");
-                if (!IsSafeArchiveEntryPath(entry))
-                {
-                    throw new ScratchPackageException($"Safe repair is impossible because the ZIP contains an unsafe ZIP entry path: {entry.FullName}");
-                }
-
-                if (!entries.TryAdd(entry.FullName, entry))
-                {
-                    throw new ScratchPackageException($"Safe repair is impossible because the ZIP contains a duplicate ZIP entry path: {entry.FullName}");
-                }
-
-            }
+            Dictionary<string, ZipArchiveEntry> entries;
+            ValidationIssue? warning;
+            try { (entries, warning) = ScratchArchiveResources.Index(zipArchive); }
+            catch (InvalidDataException ex) { throw new ScratchPackageException(ex.Message, ex); }
 
             ZipArchiveEntry? projectJsonEntry = entries.GetValueOrDefault("project.json");
             if (projectJsonEntry is null)
@@ -199,13 +185,7 @@ internal sealed class ScratchInputPackage : IDisposable
                     : new InvalidDataException("Input .sb3 does not contain project.json at the zip root.");
             }
 
-            byte[] projectJsonBytes;
-            using (Stream projectJsonStream = projectJsonEntry.Open())
-            using (MemoryStream memory = new())
-            {
-                projectJsonStream.CopyTo(memory);
-                projectJsonBytes = memory.ToArray();
-            }
+            byte[] projectJsonBytes = ScratchArchiveResources.ReadBytes(projectJsonEntry, ScratchArchiveResources.MaximumJsonBytes);
 
             return new ScratchInputPackage(
                 projectJsonBytes,
@@ -214,7 +194,7 @@ internal sealed class ScratchInputPackage : IDisposable
                 zipStream,
                 zipArchive,
                 entries,
-                null);
+                null) { PerformanceWarning = warning };
         }
         catch (ScratchPackageException)
         {
@@ -236,10 +216,6 @@ internal sealed class ScratchInputPackage : IDisposable
         }
     }
 
-    private static bool IsSafeArchiveEntryPath(ZipArchiveEntry entry)
-    {
-        return ScratchArchivePath.IsSafe(entry.FullName);
-    }
 }
 
 internal sealed class ScratchPackageException : IOException

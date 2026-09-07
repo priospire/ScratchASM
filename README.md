@@ -18,6 +18,10 @@ New projects start with a green-flag script that sets "my variable" to "Hello Wo
 The IDE has customizable opaque dark/light themes, dark title and status bars,
 native scrollbar theming, and exact Scratch category colors. Visible text colors
 first while full analysis runs in the background, including on multi-megabyte files.
+Above 1 MiB of source, full checks become on-demand to keep typing responsive;
+use Tools > Check source. There is no fixed .sb3 ZIP-entry or total-expanded-size
+limit. Large imports warn about possible lag and keep media compressed on disk
+until it is needed. See [resource safeguards](docs/round-trips.md).
 
 The editor includes line numbers, outline navigation, search, bounded undo/redo,
 context menus, automatic indentation and bracket pairing, completion suggestions,
@@ -52,6 +56,7 @@ dotnet run --project src/OpenCTS.App -- samples/hello.sasm artifacts/hello-from-
 .\ScratchASM.exe --open samples\roundtrip.sasm
 .\ScratchASM.exe --optimize game.sb3 compact.sb3
 .\ScratchASM.exe --vanilla game.sb3 vanilla.sb3
+.\ScratchASM.exe --provenance game.sb3
 ```
 
 The input can be:
@@ -88,6 +93,11 @@ Vanilla export additionally lowers supported literal Bitwise operations to nativ
 Scratch blocks. Unsupported extensions, extension monitors, runtime settings, or
 JSON that still exceeds the budget stop the export without deleting content.
 Both tools write separate outputs. See [project tools and limits](docs/project-tools.md).
+
+Exports carry a hidden ScratchASM provenance record in the ZIP comment; saved
+source carries a leading comment marker. `--provenance` inspects the record and
+checks its content hash without changing the file. This is removable, self-declared
+metadata, not tamper-proof proof of authorship or a complete edit history.
 
 ## Validation
 

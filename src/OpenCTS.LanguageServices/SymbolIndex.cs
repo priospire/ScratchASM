@@ -4,6 +4,25 @@ namespace OpenCTS.LanguageServices;
 
 public static class SymbolIndex
 {
+    public static IReadOnlyList<ScratchAsmSymbol> CreateTargetOutline(string source)
+    {
+        List<ScratchAsmSymbol> targets = [];
+        int lineNumber = 0;
+        foreach (ReadOnlySpan<char> line in source.AsSpan().EnumerateLines())
+        {
+            lineNumber++;
+            ReadOnlySpan<char> header = line.TrimStart();
+            if (!header.StartsWith("stage ", StringComparison.Ordinal) && !header.StartsWith("sprite ", StringComparison.Ordinal)) continue;
+            if (!header.TrimEnd().EndsWith("{", StringComparison.Ordinal)) continue;
+            CtsTargetDeclaration? target = CtsParser.Parse(header.ToString() + "\n}\n").CompilationUnit.Targets.FirstOrDefault();
+            if (target is null) continue;
+            targets.Add(new ScratchAsmSymbol(target.Name, ScratchAsmSymbolKind.Target,
+                new ScratchAsmTextRange(new SourceLocation(lineNumber, 1), new SourceLocation(lineNumber, line.Length + 1)),
+                Detail: target.IsStage ? "stage" : "sprite"));
+        }
+        return targets;
+    }
+
     public static IReadOnlyList<ScratchAsmSymbol> Create(string source)
         => Create(CtsParser.Parse(source).CompilationUnit);
 
