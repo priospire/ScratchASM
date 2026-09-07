@@ -17,6 +17,24 @@ public static class CtsSyntaxClassifier
         ArgumentNullException.ThrowIfNull(source);
 
         IReadOnlyList<CtsToken> tokens = CtsLexer.Lex(source);
+        return ClassifyTokens(source, tokens);
+    }
+
+    public static IReadOnlyList<CtsColorSpan> ClassifyLines(string source, IEnumerable<(int Start, int Length, int Line)> lines)
+    {
+        List<CtsToken> tokens = [];
+        foreach ((int start, int length, int line) in lines)
+            foreach (CtsToken token in CtsLexer.Lex(source.Substring(start, length)))
+                tokens.Add(token with
+                {
+                    Start = token.Start + start,
+                    Span = new SourceSpan(token.Span.Start with { Line = line }, token.Span.End with { Line = line })
+                });
+        return ClassifyTokens(source, tokens);
+    }
+
+    private static IReadOnlyList<CtsColorSpan> ClassifyTokens(string source, IReadOnlyList<CtsToken> tokens)
+    {
         ClassificationContext context = BuildContext(tokens);
         List<CtsColorSpan> spans = [];
         for (int index = 0; index < tokens.Count; index++)

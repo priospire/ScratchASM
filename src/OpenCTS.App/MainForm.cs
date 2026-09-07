@@ -22,6 +22,8 @@ public sealed partial class MainForm : Form
     private bool _isBusy;
     private int _diagnosticsVersion;
     private int _fullyColoredVersion = -1;
+    private int _viewportColoredVersion = -1;
+    private IReadOnlyList<(int Start, int Length)> _coloredViewport = [];
     private const int AutomaticAnalysisLimit = 1024 * 1024;
     private bool _checkRequested;
     private string? _performanceWarning;
@@ -493,6 +495,7 @@ public sealed partial class MainForm : Form
             _editSession = session;
             _editSessionPath = session is null ? null : fullPath;
             _packageOnly = !IsScratchAsmPath(fullPath) && session is not { CanEdit: true };
+            SetStatus("Loading source into editor...", _theme.Muted);
             ReplaceEditorText(text);
             _sourceEditor.ResetHistory();
             _savedText = text;
@@ -706,13 +709,22 @@ public sealed partial class MainForm : Form
     private void HighlightVisibleSource()
     {
         if (_isBusy || _packageOnly || !_sourceEditor.IsHandleCreated || _fullyColoredVersion == _diagnosticsVersion) return;
-        (int start, int length) = _sourceEditor.VisibleRange();
+        var ranges = _sourceEditor.VisibleTextRanges();
+        if (_viewportColoredVersion == _diagnosticsVersion && ranges.SequenceEqual(_coloredViewport)) return;
         string text = _sourceEditor.Text;
-        length = Math.Min(length, 20000);
-        if (start + length > text.Length) return;
-        var colors = CtsSyntaxClassifier.Classify(text.Substring(start, length))
-            .Select(span => span with { Start = span.Start + start }).ToArray();
-        _sourceEditor.ApplyColors(colors, _theme.EditorText, _theme.Muted, _theme.IsDark);
+        List<(int Start, int Length, int Line)> slices = [];
+        foreach ((int visibleStart, int length) in ranges)
+        {
+            int lineStart = text.LastIndexOf('\n', Math.Max(0, visibleStart - 1)) + 1;
+            int start = Math.Max(lineStart, visibleStart - 256);
+            int lineEnd = text.IndexOf('\n', visibleStart);
+            int end = Math.Min(lineEnd < 0 ? text.Length : lineEnd, visibleStart + length + 128);
+            slices.Add((start, end - start, _sourceEditor.GetLineFromCharIndex(start) + 1));
+        }
+        var colors = CtsSyntaxClassifier.ClassifyLines(text, slices);
+        _sourceEditor.ApplyColors(colors, _theme.EditorText, _theme.Muted, _theme.IsDark, viewportOnly: true);
+        _viewportColoredVersion = _diagnosticsVersion;
+        _coloredViewport = ranges;
     }
     private void ApplyScratchAsmHighlighting() => ScheduleDiagnostics();
 

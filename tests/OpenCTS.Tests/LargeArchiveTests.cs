@@ -9,6 +9,27 @@ namespace OpenCTS.Tests;
 public sealed class LargeArchiveTests
 {
     [TestMethod]
+    public void LargeRawGraphsUseOneLinePerBlockAndPreserveEveryBlock()
+    {
+        var document = ScratchProjectDocument.Compile("stage {\n}\n");
+        var blocks = document.Project["targets"]![0]!["blocks"]!.AsObject();
+        for (int i = 0; i < 1200; i++)
+            blocks["b" + i] = new System.Text.Json.Nodes.JsonObject
+            {
+                ["opcode"] = i == 0 ? "event_whenflagclicked" : "looks_say",
+                ["parent"] = i == 0 ? null : "b" + (i - 1), ["next"] = i == 1199 ? null : "b" + (i + 1),
+                ["topLevel"] = i == 0, ["shadow"] = false,
+                ["fields"] = new System.Text.Json.Nodes.JsonObject(),
+                ["inputs"] = i == 0 ? new System.Text.Json.Nodes.JsonObject() : new System.Text.Json.Nodes.JsonObject
+                { ["MESSAGE"] = new System.Text.Json.Nodes.JsonArray(1, new System.Text.Json.Nodes.JsonArray(10, "{ \" text \\ }")) }
+            };
+        var session = document.CreateSession();
+        Assert.IsLessThan(1250, session.SourceText.Count(character => character == '\n'));
+        var rebuilt = session.Materialize(session.SourceText + "\n# edited source\n");
+        Assert.IsTrue(System.Text.Json.Nodes.JsonNode.DeepEquals(blocks, rebuilt.Project["targets"]![0]!["blocks"]));
+    }
+
+    [TestMethod]
     public void IncorrectExpandedEntryLengthsStillFailExportWithoutLeavingOutput()
     {
         string directory = Directory.CreateTempSubdirectory("zip-length-").FullName;

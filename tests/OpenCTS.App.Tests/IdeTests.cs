@@ -11,6 +11,90 @@ namespace OpenCTS.App.Tests;
 public sealed class IdeTests
 {
     [TestMethod]
+    public void CoordinateQueriesMatchNativeControlWithoutCopyingTheDocument() => OnUiThread(() =>
+    {
+        using Form form = new() { Size = new Size(1000, 700) };
+        using CodeEditor editor = new() { Bounds = new Rectangle(0, 0, 450, 600) };
+        using RichTextBox reference = new() { Bounds = new Rectangle(460, 0, 450, 600), BorderStyle = BorderStyle.None,
+            WordWrap = false, DetectUrls = false, Font = editor.Font };
+        form.Controls.Add(editor); form.Controls.Add(reference); form.Show();
+        reference.Text = "first\r\ntext \u00E9 \U0001D11E\nfinal\n";
+        editor.LoadSourceText(reference.Text);
+        for (int index = 0; index <= editor.TextLength; index++)
+            Assert.AreEqual(reference.GetPositionFromCharIndex(index), editor.GetPositionFromCharIndex(index), $"Position {index}");
+        foreach (Point point in new[] { Point.Empty, new Point(40, 30), new Point(440, 590) })
+            Assert.AreEqual(reference.GetCharIndexFromPosition(point), editor.GetCharIndexFromPosition(point));
+        editor.LoadSourceText(string.Concat(Enumerable.Repeat("# sample text\n", 100000)));
+        long before = GC.GetAllocatedBytesForCurrentThread();
+        for (int i = 0; i < 1000; i++)
+        {
+            editor.GetPositionFromCharIndex(i);
+            editor.GetCharIndexFromPosition(new Point(10, 10));
+        }
+        Assert.IsLessThan(65536L, GC.GetAllocatedBytesForCurrentThread() - before, "Coordinate queries must not retrieve the entire native text buffer.");
+    });
+
+    [TestMethod]
+    public void LongListHighlightingIsBoundedAndKeepsFollowingLinesColored() => OnUiThread(() =>
+    {
+        using MainForm form = new(persistPreferences: false); form.Show();
+        CodeEditor editor = Descendants(form).OfType<CodeEditor>().Single();
+        PumpUntil(() => !editor.ReadOnly);
+        string source = "stage {\n  list values = [" + string.Join(",", Enumerable.Repeat("1", 40000)) +
+            "]\n  @greenflag:\n    values.add 2\n}\n" + string.Concat(Enumerable.Repeat("# padding\n", 110000));
+        typeof(MainForm).GetMethod("ReplaceEditorText", BindingFlags.NonPublic | BindingFlags.Instance)!.Invoke(form, [source]);
+        var watch = System.Diagnostics.Stopwatch.StartNew();
+        typeof(MainForm).GetMethod("HighlightVisibleSource", BindingFlags.NonPublic | BindingFlags.Instance)!.Invoke(form, null);
+        Assert.IsTrue(watch.Elapsed < TimeSpan.FromSeconds(1), $"Long-list highlighting stalled for {watch.Elapsed}.");
+        Assert.IsLessThan(5000, editor.VisibleTextRanges().Sum(range => range.Length));
+        editor.Select(source.IndexOf("@greenflag", StringComparison.Ordinal), 10);
+        Assert.AreEqual(ColorTranslator.FromHtml(ScratchCategoryColors.Events).ToArgb(), editor.SelectionColor.ToArgb());
+    });
+
+    [TestMethod]
+    public void ProfileExternalArchiveWhenRequested()
+    {
+        string? path = Environment.GetEnvironmentVariable("SCRATCHASM_PROFILE_ARCHIVE");
+        if (string.IsNullOrEmpty(path)) { Assert.Inconclusive("Set SCRATCHASM_PROFILE_ARCHIVE to profile a local archive."); return; }
+        OnUiThread(() =>
+        {
+            var watch = System.Diagnostics.Stopwatch.StartNew();
+            var session = ScratchProjectEditSession.Open(path);
+            Console.WriteLine($"Core import: {watch.Elapsed.TotalMilliseconds:F0} ms; source: {session.SourceText.Length:N0} characters.");
+            using MainForm form = new(path, persistPreferences: false);
+            CodeEditor editor = Descendants(form).OfType<CodeEditor>().Single();
+            double previous = 0, maximumGap = 0;
+            using System.Windows.Forms.Timer pulse = new() { Interval = 25 };
+            watch.Restart();
+            pulse.Tick += (_, _) => { double now = watch.Elapsed.TotalMilliseconds; maximumGap = Math.Max(maximumGap, now - previous); previous = now; };
+            pulse.Start(); form.Show();
+            PumpUntil(() => form.Text.Contains(Path.GetFileName(path), StringComparison.Ordinal) && !editor.ReadOnly);
+            Application.DoEvents();
+            Assert.AreEqual(session.SourceText, editor.Text);
+            Console.WriteLine($"Window import: {watch.Elapsed.TotalMilliseconds:F0} ms; maximum UI pulse gap: {maximumGap:F0} ms.");
+            watch.Restart();
+            typeof(MainForm).GetMethod("HighlightVisibleSource", BindingFlags.NonPublic | BindingFlags.Instance)!.Invoke(form, null);
+            Console.WriteLine($"Highlight: {watch.Elapsed.TotalMilliseconds:F0} ms.");
+            watch.Restart();
+            editor.Select(editor.TextLength, 0); editor.ScrollToCaret();
+            Console.WriteLine($"Scroll to end: {watch.Elapsed.TotalMilliseconds:F0} ms.");
+            watch.Restart();
+            editor.SelectedText = "\n# local profiling edit";
+            Console.WriteLine($"Typing: {watch.Elapsed.TotalMilliseconds:F0} ms.");
+            int offset = 0;
+            foreach (ReadOnlySpan<char> line in editor.Text.AsSpan().EnumerateLines())
+            {
+                if (line.Length > 10000) break;
+                offset += line.Length + 1;
+            }
+            editor.Select(Math.Min(offset, editor.TextLength), 0); editor.ScrollToCaret();
+            watch.Restart();
+            typeof(MainForm).GetMethod("HighlightVisibleSource", BindingFlags.NonPublic | BindingFlags.Instance)!.Invoke(form, null);
+            Console.WriteLine($"Long-list viewport highlight: {watch.Elapsed.TotalMilliseconds:F0} ms.");
+        });
+    }
+
+    [TestMethod]
     public void SavingSourceUsesTheBackgroundWorkerAndKeepsDocumentState() => OnUiThread(() =>
     {
         string directory = Directory.CreateTempSubdirectory("async-source-").FullName;
@@ -273,7 +357,7 @@ public sealed class IdeTests
         pulse.Start();
         form.Show();
         CodeEditor editor = Descendants(form).OfType<CodeEditor>().Single();
-        PumpUntil(() => editor.TextLength > 5 * 1024 * 1024 && !editor.ReadOnly);
+        PumpUntil(() => editor.TextLength > 1024 * 1024 && !editor.ReadOnly);
         int opcode = editor.Text.IndexOf("event_whenflagclicked", StringComparison.Ordinal);
         editor.Select(opcode, 0); editor.ScrollToCaret();
         PumpUntil(() =>

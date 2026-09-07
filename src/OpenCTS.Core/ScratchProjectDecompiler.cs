@@ -142,6 +142,20 @@ internal sealed class ScratchProjectDecompiler
     {
         source.AppendLine();
         source.AppendLine("  # Exact Scratch graph: IDs, inputs, shadows, and custom block mutations.");
+        if (blocks.Count > 1000)
+        {
+            source.AppendLine("  rawblocks {");
+            int remaining = blocks.Count;
+            foreach ((string id, JsonNode? block) in blocks)
+            {
+                source.Append("    ").Append(Quote(id)).Append(": ").Append(block?.ToJsonString() ?? "null");
+                if (--remaining > 0) source.Append(',');
+                source.AppendLine();
+            }
+            source.AppendLine("  }");
+            origin.BlockOrder.AddRange(blocks.Select(pair => pair.Key));
+            return;
+        }
         string json = blocks.ToJsonString(new JsonSerializerOptions { WriteIndented = true });
         string[] lines = NormalizeNewlines(json).Split('\n');
         source.Append("  rawblocks ").AppendLine(lines[0]);

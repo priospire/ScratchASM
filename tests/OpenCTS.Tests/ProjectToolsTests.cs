@@ -11,6 +11,24 @@ namespace OpenCTS.Tests;
 public sealed class ProjectToolsTests
 {
     [TestMethod]
+    public void VisibleLineClassificationKeepsDeclarationContextAndOriginalOffsets()
+    {
+        string source = "stage {\n  extension custom \"https://example.com/custom.js\" \"#123456\"\n  list items = [" + new string(' ', 50000) + "]\n  @greenflag:\n    % \"custom_test\"\n    items.add 1\n}\n";
+        List<(int Start, int Length, int Line)> slices = [];
+        int offset = 0, number = 1;
+        foreach (ReadOnlySpan<char> line in source.AsSpan().EnumerateLines())
+        {
+            slices.Add((offset, Math.Min(line.Length, 150), number++));
+            offset += line.Length + 1;
+        }
+        var colors = CtsSyntaxClassifier.ClassifyLines(source, slices);
+        int opcode = source.IndexOf("\"custom_test\"", StringComparison.Ordinal);
+        Assert.IsTrue(colors.Any(span => span.Start == opcode && span.Color == "#123456"));
+        Assert.IsTrue(colors.Any(span => span.Start == source.IndexOf("@greenflag", StringComparison.Ordinal) && span.Color == ScratchCategoryColors.Events));
+        Assert.IsLessThan(100, colors.Count);
+    }
+
+    [TestMethod]
     public void SpriteArchiveImportPreservesAssetsAndRejectsUnsafeEntries()
     {
         string directory = Directory.CreateTempSubdirectory("sprite-import-").FullName;
