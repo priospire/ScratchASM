@@ -189,7 +189,7 @@ public sealed class LspDispatcher
             diagnostics.Add(new JsonObject
             {
                 ["range"] = ToLspRange(diagnostic.Range.Start, diagnostic.Range.End),
-                ["severity"] = diagnostic.Severity == "error" ? 1 : 2,
+                ["severity"] = diagnostic.Severity switch { "error" => 1, "warning" => 2, "info" => 3, _ => 4 },
                 ["source"] = ScratchAsmLanguage.DisplayName,
                 ["code"] = diagnostic.Code,
                 ["message"] = diagnostic.Message

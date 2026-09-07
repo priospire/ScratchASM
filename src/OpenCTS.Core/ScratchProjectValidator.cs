@@ -27,6 +27,8 @@ internal static class ScratchProjectValidator
         if (root.TryGetProperty("monitors", out _)) RequireProperty(root, "monitors", JsonValueKind.Array, "$", sourceMap, issues, out _);
         if (root.TryGetProperty("extensions", out _)) RequireProperty(root, "extensions", JsonValueKind.Array, "$", sourceMap, issues, out _);
         RequireProperty(root, "meta", JsonValueKind.Object, "$", sourceMap, issues, out _);
+        issues.AddRange(ScratchCompatibility.Inspect(System.Text.Json.Nodes.JsonNode.Parse(root.GetRawText())!.AsObject(),
+            System.Text.Encoding.UTF8.GetByteCount(root.GetRawText())));
 
         return assetReferences;
     }

@@ -5,7 +5,8 @@ public sealed record SourceLocation(int Line, int Column);
 public enum DiagnosticSeverity
 {
     Error,
-    Warning
+    Warning,
+    Info
 }
 
 public sealed record SourceSpan(SourceLocation Start, SourceLocation End);

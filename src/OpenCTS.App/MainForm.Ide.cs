@@ -14,6 +14,9 @@ public sealed partial class MainForm
     private readonly ToolStripStatusLabel _activity = new() { Spring = true, TextAlign = ContentAlignment.MiddleLeft, Text = "Ready" };
     private readonly ToolStripStatusLabel _caret = new() { Text = "Ln 1, Col 1" };
     private ToolStrip? _ideTools;
+    private StatusStrip? _statusStrip;
+    private Control? _pathsPanel;
+    private SplitContainer? _workspace;
     private string? _loadedPath;
     private string _savedText = "";
     private bool _packageOnly;
@@ -43,17 +46,34 @@ public sealed partial class MainForm
         Tool("", "\uE7A7", "Undo (Ctrl+Z)", (_, _) => _sourceEditor.Undo());
         Tool("", "\uE7A6", "Redo (Ctrl+Y)", (_, _) => _sourceEditor.Redo());
         Tool("", "\uE721", "Find (Ctrl+F)", (_, _) => ShowFind());
+        Tool("Project", "\uE8B9", "Sprites, costumes, and sounds", (_, _) => ToggleInspector());
+        Tool("Guide", "\uE82D", "Language guide (F1)", (_, _) => ShowGuide());
+        ToolStripDropDownButton utilities = new("Tools") { Image = MakeGlyph("\uE713") };
+        utilities.DropDownItems.Add("Compact / Optimize...", null, async (_, _) => await RunProjectToolAsync(false));
+        utilities.DropDownItems.Add("Export vanilla Scratch...", null, async (_, _) => await RunProjectToolAsync(true));
+        utilities.DropDownItems.Add("TurboWarp extensions...", null, (_, _) => ShowExtensions());
+        utilities.DropDownItems.Add("Undo last asset change", null, (_, _) => UndoAssetChange());
+        utilities.DropDownItems.Add(new ToolStripSeparator());
+        utilities.DropDownItems.Add("Appearance...", null, (_, _) => ShowAppearance());
+        utilities.DropDownItems.Add("Input / output paths", null, (_, _) => { if (_pathsPanel is not null) _pathsPanel.Visible = !_pathsPanel.Visible; });
+        _ideTools.Items.Add(utilities);
         ToolStripButton theme = new("Dark mode") { CheckOnClick = true, Checked = true, Alignment = ToolStripItemAlignment.Right };
         theme.CheckedChanged += (_, _) => { _darkModeCheckBox.Checked = theme.Checked; DarkModeCheckBox_CheckedChanged(null, EventArgs.Empty); };
         _darkModeCheckBox.Checked = true;
         _ideTools.Items.Add(theme);
         try
         {
-            if (File.Exists(PreferencesPath)) theme.Checked = JsonSerializer.Deserialize<ThemePreference>(File.ReadAllText(PreferencesPath))?.Dark ?? true;
+            if (_persistPreferences && File.Exists(PreferencesPath))
+            {
+                _preferences = JsonSerializer.Deserialize<ThemePreference>(File.ReadAllText(PreferencesPath)) ?? new(true);
+                theme.Checked = _preferences.Dark;
+            }
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException) { }
 
         Control paths = CreatePathsPanel();
+        _pathsPanel = paths;
+        paths.Visible = false;
         paths.Dock = DockStyle.Top;
         paths.Height = 98;
         paths.Margin = Padding.Empty;
@@ -62,6 +82,7 @@ public sealed partial class MainForm
         _inputPathTextBox.Dock = DockStyle.Fill;
         _outputPathTextBox.Dock = DockStyle.Fill;
         SplitContainer workspace = new() { Dock = DockStyle.Fill, Size = new Size(1100, 600), SplitterDistance = 205, Panel1MinSize = 140, SplitterWidth = 5 };
+        _workspace = workspace;
         workspace.Panel1.Controls.Add(_outline);
         workspace.Panel1.Controls.Add(new Label { Text = "OUTLINE", Dock = DockStyle.Top, Height = 32, Padding = new Padding(12, 8, 0, 0) });
         SplitContainer panels = new() { Dock = DockStyle.Fill, Orientation = Orientation.Horizontal, Size = new Size(880, 600), SplitterDistance = 440, Panel1MinSize = 140, Panel2MinSize = 80, SplitterWidth = 5 };
@@ -75,15 +96,25 @@ public sealed partial class MainForm
         _searchPanel.Controls.Add(CreateButton("Previous", (_, _) => FindNext(true)));
         _searchPanel.Controls.Add(_matchCase);
         _searchPanel.Controls.Add(CreateButton("Close", (_, _) => { _searchPanel.Visible = false; _sourceEditor.Focus(); }));
-        workspace.Panel2.Controls.Add(panels);
+        _editorPanels = panels;
+        Panel center = new() { Dock = DockStyle.Fill };
+        center.Controls.Add(panels);
+        center.Controls.Add(BuildGuidePanel());
+        workspace.Panel2.Controls.Add(center);
+        workspace.Panel2.Controls.Add(BuildInspector());
         StatusStrip status = new() { SizingGrip = false };
+        _statusStrip = status;
         status.Items.Add(_activity);
         status.Items.Add(_caret);
         status.Items.Add(new ToolStripStatusLabel("ScratchASM  |  UTF-8") { Margin = new Padding(16, 0, 10, 0) });
         root.Controls.Add(workspace);
         root.Controls.Add(paths);
+        _progress = new ActivityLine { Dock = DockStyle.Top };
+        root.Controls.Add(_progress);
         root.Controls.Add(_ideTools);
         root.Controls.Add(status);
+        _activity.AutoToolTip = true;
+        Resize += (_, _) => { if (_inspector is not null) _inspector.Visible = Width >= 1100 && _inspectorWanted; };
         return root;
     }
 
@@ -107,6 +138,14 @@ public sealed partial class MainForm
                 _sourceEditor.Focus();
             }
         };
+        _outline.ContextMenuStrip = new ContextMenuStrip();
+        _outline.ContextMenuStrip.Items.Add("Go to source", null, (_, _) =>
+        {
+            if (_outline.SelectedNode?.Tag is SourceLocation location)
+            { _sourceEditor.Select(CtsSourcePosition.GetOffset(_sourceEditor.Text, location), 0); _sourceEditor.ScrollToCaret(); _sourceEditor.Focus(); }
+        });
+        _outline.ContextMenuStrip.Items.Add("Collapse all", null, (_, _) => _outline.CollapseAll());
+        _outline.ContextMenuStrip.Items.Add("Expand all", null, (_, _) => _outline.ExpandAll());
         DragEnter += (_, e) => e.Effect = !_isBusy && e.Data?.GetDataPresent(DataFormats.FileDrop) == true ? DragDropEffects.Copy : DragDropEffects.None;
         DragDrop += (_, e) => { if (e.Data?.GetData(DataFormats.FileDrop) is string[] { Length: 1 } files) LoadInputPreview(files[0]); };
         FormClosing += (_, e) => { if (_isBusy || !ConfirmUnsaved()) e.Cancel = true; };
@@ -115,6 +154,7 @@ public sealed partial class MainForm
 
     private void NewDocument()
     {
+        _assetUndo = null;
         _loadedPath = null;
         _editSession = null;
         _editSessionPath = null;
@@ -122,10 +162,15 @@ public sealed partial class MainForm
         _sourceEditor.ReadOnly = false;
         _inputPathTextBox.Clear();
         _outputPathTextBox.Text = Path.Combine(Directory.GetCurrentDirectory(), "project.sb3");
-        ReplaceEditorText("stage {\n  @greenflag:\n\n}\n");
+        ScratchProjectDocument starter = ScratchProjectDocument.Compile("stage {\n  var my_variable = \"\"\n\n  @greenflag:\n    my_variable = \"Hello World!\"\n}\n");
+        starter.Project["targets"]![0]!["variables"]!.AsObject().First().Value![0] = "my variable";
+        _editSession = starter.CreateSession();
+        _editSessionPath = Path.Combine(Directory.GetCurrentDirectory(), "untitled.sasm");
+        ReplaceEditorText(_editSession.SourceText);
         _sourceEditor.ResetHistory();
         _savedText = _sourceEditor.Text;
         UpdateDocumentTitle();
+        if (Visible) _ = RefreshProjectAsync();
     }
     private bool ConfirmUnsaved()
     {
@@ -194,6 +239,7 @@ public sealed partial class MainForm
                 case Keys.F3: FindNext(false); return true;
                 case Keys.Shift | Keys.F3: FindNext(true); return true;
                 case Keys.F5: _ = RunConversionAsync(false); return true;
+                case Keys.F1: ShowGuide(); return true;
                 case Keys.Escape: _searchPanel.Visible = false; _sourceEditor.Focus(); return true;
             }
         }
@@ -204,7 +250,7 @@ public sealed partial class MainForm
         try { return other is not null && string.Equals(Path.GetFullPath(path), Path.GetFullPath(other), StringComparison.OrdinalIgnoreCase); }
         catch (Exception ex) when (ex is ArgumentException or NotSupportedException) { return false; }
     }
-    private static bool IsDocumentError(Exception ex) => ex is IOException or InvalidDataException or UnauthorizedAccessException or ArgumentException or NotSupportedException or JsonException or InvalidOperationException;
+    private static bool IsDocumentError(Exception ex) => ex is IOException or InvalidDataException or UnauthorizedAccessException or ArgumentException or NotSupportedException or JsonException or InvalidOperationException or FormatException or OverflowException or System.Xml.XmlException or System.Runtime.InteropServices.ExternalException or NAudio.MmException;
     private static Bitmap MakeGlyph(string glyph)
     {
         Bitmap image = new(20, 20);
@@ -216,8 +262,10 @@ public sealed partial class MainForm
     private void SaveThemePreference()
     {
         if (!_persistPreferences) return;
-        try { ScratchProjectEditSession.WriteSourceFile(PreferencesPath, JsonSerializer.Serialize(new ThemePreference(_theme.IsDark)), true); }
+        try { ScratchProjectEditSession.WriteSourceFile(PreferencesPath, JsonSerializer.Serialize(_preferences with { Dark = _theme.IsDark }), true); }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { _activity.Text = "Theme preference could not be saved."; }
     }
-    private sealed record ThemePreference(bool Dark);
+    private ThemePreference _preferences = new(true);
+    private sealed record ThemePreference(bool Dark, string? Accent = null, string? Background = null,
+        string? Surface = null, string? Editor = null, string? Foreground = null, float FontSize = 11, bool Animations = true);
 }

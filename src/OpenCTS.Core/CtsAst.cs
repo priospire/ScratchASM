@@ -92,7 +92,9 @@ public sealed record CtsBroadcastDeclaration(
 
 public sealed record CtsExtensionDeclaration(
     string Name,
-    SourceSpan Span) : CtsTargetMember(Span);
+    SourceSpan Span,
+    string? Url = null,
+    string? Color = null) : CtsTargetMember(Span);
 
 public sealed record CtsStateDeclaration(
     IReadOnlyDictionary<string, CtsValue> Properties,

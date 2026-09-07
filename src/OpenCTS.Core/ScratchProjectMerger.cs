@@ -109,6 +109,13 @@ internal static class ScratchProjectMerger
             }
         }
         merged["extensions"] = MergeExtensions(baseline.Project["extensions"] as JsonArray, compiledProject["extensions"] as JsonArray);
+        foreach (string property in new[] { "extensionURLs", "extensionColors" })
+        {
+            if (compiledProject[property] is not JsonObject values) continue;
+            JsonObject combined = merged[property] as JsonObject ?? new JsonObject();
+            foreach ((string key, JsonNode? value) in values) combined[key] = value?.DeepClone();
+            merged[property] = combined;
+        }
         JsonObject meta = merged["meta"] as JsonObject ?? [];
         meta["agent"] = ScratchAsmLanguage.DisplayName;
         meta["scratchasm"] = new JsonObject

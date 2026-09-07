@@ -1,0 +1,626 @@
+[
+  {
+    "Id": "text",
+    "Name": "Animated Text",
+    "Url": "https://extensions.turbowarp.org/lab/text.js",
+    "Color": "#9966FF"
+  },
+  {
+    "Id": "faceSensing",
+    "Name": "Face Sensing",
+    "Url": "https://extensions.turbowarp.org/lab/face-sensing.js",
+    "Color": "#0FBD8C"
+  },
+  {
+    "Id": "videoSprites",
+    "Name": "Video Sprites",
+    "Url": "https://extensions.turbowarp.org/lab/video-sprites.js",
+    "Color": "#0FBD8C"
+  },
+  {
+    "Id": "stretch",
+    "Name": "Stretch",
+    "Url": "https://extensions.turbowarp.org/stretch.js",
+    "Color": "#4287f5"
+  },
+  {
+    "Id": "Gamepad",
+    "Name": "Gamepad",
+    "Url": "https://extensions.turbowarp.org/gamepad.js",
+    "Color": "#0FBD8C"
+  },
+  {
+    "Id": "griffpatch",
+    "Name": "Box2D Physics",
+    "Url": "https://extensions.turbowarp.org/box2d.js",
+    "Color": "#0FBD8C"
+  },
+  {
+    "Id": "files",
+    "Name": "Files",
+    "Url": "https://extensions.turbowarp.org/files.js",
+    "Color": "#fcb103"
+  },
+  {
+    "Id": "pointerlock",
+    "Name": "Pointerlock",
+    "Url": "https://extensions.turbowarp.org/pointerlock.js",
+    "Color": "#0FBD8C"
+  },
+  {
+    "Id": "MouseCursor",
+    "Name": "Mouse Cursor",
+    "Url": "https://extensions.turbowarp.org/cursor.js",
+    "Color": "#0FBD8C"
+  },
+  {
+    "Id": "runtimeoptions",
+    "Name": "Runtime Options",
+    "Url": "https://extensions.turbowarp.org/runtime-options.js",
+    "Color": "#8c9abf"
+  },
+  {
+    "Id": "fetch",
+    "Name": "Fetch",
+    "Url": "https://extensions.turbowarp.org/fetch.js",
+    "Color": "#0FBD8C"
+  },
+  {
+    "Id": "strings",
+    "Name": "Text",
+    "Url": "https://extensions.turbowarp.org/text.js",
+    "Color": "#0FBD8C"
+  },
+  {
+    "Id": "localstorage",
+    "Name": "Local Storage",
+    "Url": "https://extensions.turbowarp.org/local-storage.js",
+    "Color": "#0FBD8C"
+  },
+  {
+    "Id": "truefantombase",
+    "Name": "Base",
+    "Url": "https://extensions.turbowarp.org/true-fantom/base.js",
+    "Color": "#e200ca"
+  },
+  {
+    "Id": "Bitwise",
+    "Name": "Bitwise",
+    "Url": "https://extensions.turbowarp.org/bitwise.js",
+    "Color": "#17cde6"
+  },
+  {
+    "Id": "skyhigh173BigInt",
+    "Name": "BigInt",
+    "Url": "https://extensions.turbowarp.org/Skyhigh173/bigint.js",
+    "Color": "#59C093"
+  },
+  {
+    "Id": "utilities",
+    "Name": "Utilities",
+    "Url": "https://extensions.turbowarp.org/utilities.js",
+    "Color": "#8BC34A"
+  },
+  {
+    "Id": "lmsVideo",
+    "Name": "Video",
+    "Url": "https://extensions.turbowarp.org/Lily/Video.js",
+    "Color": "#557882"
+  },
+  {
+    "Id": "iframe",
+    "Name": "Iframe",
+    "Url": "https://extensions.turbowarp.org/iframe.js",
+    "Color": "#0FBD8C"
+  },
+  {
+    "Id": "clayhtmlencode",
+    "Name": "HTML Encode",
+    "Url": "https://extensions.turbowarp.org/Clay/htmlEncode.js",
+    "Color": "#0FBD8C"
+  },
+  {
+    "Id": "xeltallivclipblend",
+    "Name": "Clipping & Blending",
+    "Url": "https://extensions.turbowarp.org/Xeltalliv/clippingblending.js",
+    "Color": "#9966FF"
+  },
+  {
+    "Id": "clipboard",
+    "Name": "Clipboard",
+    "Url": "https://extensions.turbowarp.org/clipboard.js",
+    "Color": "#008080"
+  },
+  {
+    "Id": "penP",
+    "Name": "Pen Plus V7",
+    "Url": "https://extensions.turbowarp.org/obviousAlexC/penPlus.js",
+    "Color": "#0FBD8C"
+  },
+  {
+    "Id": "betterpen",
+    "Name": "Pen Plus V5 (Old)",
+    "Url": "https://extensions.turbowarp.org/penplus.js",
+    "Color": "#0e9a6b"
+  },
+  {
+    "Id": "xeltallivSimple3D",
+    "Name": "Simple 3D",
+    "Url": "https://extensions.turbowarp.org/Xeltalliv/simple3D.js",
+    "Color": "#5CB1D6"
+  },
+  {
+    "Id": "lmsSkins",
+    "Name": "Skins",
+    "Url": "https://extensions.turbowarp.org/Lily/Skins.js",
+    "Color": "#6b56ff"
+  },
+  {
+    "Id": "obviousalexsensing",
+    "Name": "Sensing Plus",
+    "Url": "https://extensions.turbowarp.org/obviousAlexC/SensingPlus.js",
+    "Color": "#5cb1d6"
+  },
+  {
+    "Id": "cubesterKeySimulation",
+    "Name": "Key Simulation",
+    "Url": "https://extensions.turbowarp.org/CubesterYT/KeySimulation.js",
+    "Color": "#BF0000"
+  },
+  {
+    "Id": "lmsclonesplus",
+    "Name": "Clones Plus",
+    "Url": "https://extensions.turbowarp.org/Lily/ClonesPlus.js",
+    "Color": "#FFAB19"
+  },
+  {
+    "Id": "lmsLooksPlus",
+    "Name": "Looks Plus",
+    "Url": "https://extensions.turbowarp.org/Lily/LooksPlus.js",
+    "Color": "#9966FF"
+  },
+  {
+    "Id": "lmsMoreEvents",
+    "Name": "More Events",
+    "Url": "https://extensions.turbowarp.org/Lily/MoreEvents.js",
+    "Color": "#FFBF00"
+  },
+  {
+    "Id": "SPmessagePlus",
+    "Name": "Messages+",
+    "Url": "https://extensions.turbowarp.org/SharkPool/Messages-Plus.js",
+    "Color": "#FFBF00"
+  },
+  {
+    "Id": "lmsListTools",
+    "Name": "List Tools",
+    "Url": "https://extensions.turbowarp.org/Lily/ListTools.js",
+    "Color": "#ff661a"
+  },
+  {
+    "Id": "mobilekeyboard0419",
+    "Name": "Mobile Keyboard",
+    "Url": "https://extensions.turbowarp.org/veggiecan/mobilekeyboard.js",
+    "Color": "#999999"
+  },
+  {
+    "Id": "nkmoremotion",
+    "Name": "More Motion",
+    "Url": "https://extensions.turbowarp.org/NexusKitten/moremotion.js",
+    "Color": "#4c97ff"
+  },
+  {
+    "Id": "cubesterWindowControls",
+    "Name": "Window Controls",
+    "Url": "https://extensions.turbowarp.org/CubesterYT/WindowControls.js",
+    "Color": "#359ed4"
+  },
+  {
+    "Id": "fullscreen0419",
+    "Name": "Browser Fullscreen",
+    "Url": "https://extensions.turbowarp.org/veggiecan/browserfullscreen.js",
+    "Color": "#F39016"
+  },
+  {
+    "Id": "shreder95resolution",
+    "Name": "Screen Resolution",
+    "Url": "https://extensions.turbowarp.org/shreder95ua/resolution.js",
+    "Color": "#FFAB19"
+  },
+  {
+    "Id": "xmerclosecontrol",
+    "Name": "Ask Before Closing Tab",
+    "Url": "https://extensions.turbowarp.org/XmerOriginals/closecontrol.js",
+    "Color": "#0FBD8C"
+  },
+  {
+    "Id": "navigatorinfo",
+    "Name": "Navigator",
+    "Url": "https://extensions.turbowarp.org/navigator.js",
+    "Color": "#0FBD8C"
+  },
+  {
+    "Id": "battery",
+    "Name": "Battery",
+    "Url": "https://extensions.turbowarp.org/battery.js",
+    "Color": "#cf8436"
+  },
+  {
+    "Id": "pwldevvibration",
+    "Name": "Vibration",
+    "Url": "https://extensions.turbowarp.org/PwLDev/vibration.js",
+    "Color": "#45a15c"
+  },
+  {
+    "Id": "shovelcss",
+    "Name": "Custom Styles",
+    "Url": "https://extensions.turbowarp.org/TheShovel/CustomStyles.js",
+    "Color": "#0072d6"
+  },
+  {
+    "Id": "shovelColorPicker",
+    "Name": "Color Picker",
+    "Url": "https://extensions.turbowarp.org/TheShovel/ColorPicker.js",
+    "Color": "#ff7db5"
+  },
+  {
+    "Id": "nkcontrols",
+    "Name": "Control Controls",
+    "Url": "https://extensions.turbowarp.org/NexusKitten/controlcontrols.js",
+    "Color": "#ffab19"
+  },
+  {
+    "Id": "mdwaltersnotifications",
+    "Name": "Notifications",
+    "Url": "https://extensions.turbowarp.org/mdwalters/notifications.js",
+    "Color": "#0FBD8C"
+  },
+  {
+    "Id": "dtbyxeroname",
+    "Name": "Delta Time",
+    "Url": "https://extensions.turbowarp.org/XeroName/Deltatime.js",
+    "Color": "#333333"
+  },
+  {
+    "Id": "AR",
+    "Name": "Augmented Reality",
+    "Url": "https://extensions.turbowarp.org/ar.js",
+    "Color": "#d10000"
+  },
+  {
+    "Id": "Encoding",
+    "Name": "Encoding",
+    "Url": "https://extensions.turbowarp.org/encoding.js",
+    "Color": "#6495ed"
+  },
+  {
+    "Id": "SPtuneShark3",
+    "Name": "Tune Shark V3",
+    "Url": "https://extensions.turbowarp.org/SharkPool/Tune-Shark-V3.js",
+    "Color": "#666666"
+  },
+  {
+    "Id": "lmsSoundExpanded",
+    "Name": "Sound Expanded",
+    "Url": "https://extensions.turbowarp.org/Lily/SoundExpanded.js",
+    "Color": "#CF63CF"
+  },
+  {
+    "Id": "lmsTempVars2",
+    "Name": "Temporary Variables",
+    "Url": "https://extensions.turbowarp.org/Lily/TempVariables2.js",
+    "Color": "#FF791A"
+  },
+  {
+    "Id": "lmsTimers",
+    "Name": "More Timers",
+    "Url": "https://extensions.turbowarp.org/Lily/MoreTimers.js",
+    "Color": "#5cb1d6"
+  },
+  {
+    "Id": "clouddataping",
+    "Name": "Ping Cloud Data",
+    "Url": "https://extensions.turbowarp.org/clouddata-ping.js",
+    "Color": "#0FBD8C"
+  },
+  {
+    "Id": "cloudlink",
+    "Name": "CloudLink V4",
+    "Url": "https://extensions.turbowarp.org/cloudlink.js",
+    "Color": "#0FBD8C"
+  },
+  {
+    "Id": "truefantomnetwork",
+    "Name": "Network",
+    "Url": "https://extensions.turbowarp.org/true-fantom/network.js",
+    "Color": "#146600"
+  },
+  {
+    "Id": "truefantommath",
+    "Name": "Math",
+    "Url": "https://extensions.turbowarp.org/true-fantom/math.js",
+    "Color": "#59c059"
+  },
+  {
+    "Id": "truefantomregexp",
+    "Name": "RegExp",
+    "Url": "https://extensions.turbowarp.org/true-fantom/regexp.js",
+    "Color": "#e6282a"
+  },
+  {
+    "Id": "truefantomcouplers",
+    "Name": "Couplers",
+    "Url": "https://extensions.turbowarp.org/true-fantom/couplers.js",
+    "Color": "#404040"
+  },
+  {
+    "Id": "samuelloufgeolocation",
+    "Name": "Geolocation",
+    "Url": "https://extensions.turbowarp.org/SamuelLouf/Geolocation.js",
+    "Color": "#036e15"
+  },
+  {
+    "Id": "dogeiscutformatnumbers",
+    "Name": "Format Numbers",
+    "Url": "https://extensions.turbowarp.org/DogeisCut/FormatNumbers.js",
+    "Color": "#419873"
+  },
+  {
+    "Id": "lmsAllMenus",
+    "Name": "All Menus",
+    "Url": "https://extensions.turbowarp.org/Lily/AllMenus.js",
+    "Color": "#0FBD8C"
+  },
+  {
+    "Id": "lmsHackedBlocks",
+    "Name": "Hidden Block Collection",
+    "Url": "https://extensions.turbowarp.org/Lily/HackedBlocks.js",
+    "Color": "#0FBD8C"
+  },
+  {
+    "Id": "lmsCast",
+    "Name": "Cast",
+    "Url": "https://extensions.turbowarp.org/Lily/Cast.js",
+    "Color": "#0FBD8C"
+  },
+  {
+    "Id": "sipctime",
+    "Name": "Time",
+    "Url": "https://extensions.turbowarp.org/-SIPC-/time.js",
+    "Color": "#ff8000"
+  },
+  {
+    "Id": "sipcconsole",
+    "Name": "Consoles",
+    "Url": "https://extensions.turbowarp.org/-SIPC-/consoles.js",
+    "Color": "#808080"
+  },
+  {
+    "Id": "zxmushroom63searchparams",
+    "Name": "Search Params",
+    "Url": "https://extensions.turbowarp.org/ZXMushroom63/searchApi.js",
+    "Color": "#b4b4b4"
+  },
+  {
+    "Id": "ShovelUtils",
+    "Name": "ShovelUtils",
+    "Url": "https://extensions.turbowarp.org/TheShovel/ShovelUtils.js",
+    "Color": "#f54242"
+  },
+  {
+    "Id": "lmsAssets",
+    "Name": "Asset Manager",
+    "Url": "https://extensions.turbowarp.org/Lily/Assets.js",
+    "Color": "#5779ca"
+  },
+  {
+    "Id": "SPASfontManager",
+    "Name": "Font Manager",
+    "Url": "https://extensions.turbowarp.org/SharkPool/Font-Manager.js",
+    "Color": "#2b7d6e"
+  },
+  {
+    "Id": "dninwakelock",
+    "Name": "Wake Lock",
+    "Url": "https://extensions.turbowarp.org/DNin/wake-lock.js",
+    "Color": "#0FBD8C"
+  },
+  {
+    "Id": "skyhigh173JSON",
+    "Name": "JSON",
+    "Url": "https://extensions.turbowarp.org/Skyhigh173/json.js",
+    "Color": "#3271D0"
+  },
+  {
+    "Id": "mbwxml",
+    "Name": "XML",
+    "Url": "https://extensions.turbowarp.org/mbw/xml.js",
+    "Color": "#6c2b5f"
+  },
+  {
+    "Id": "numericalencoding2",
+    "Name": "Numerical Encoding V2",
+    "Url": "https://extensions.turbowarp.org/numerical-encoding-2.js",
+    "Color": "#0FBD8C"
+  },
+  {
+    "Id": "cs2627883NumericalEncoding",
+    "Name": "Numerical Encoding V1",
+    "Url": "https://extensions.turbowarp.org/cs2627883/numericalencoding.js",
+    "Color": "#0FBD8C"
+  },
+  {
+    "Id": "SPcamera",
+    "Name": "Camera V2",
+    "Url": "https://extensions.turbowarp.org/SharkPool/Camera.js",
+    "Color": "#517af5"
+  },
+  {
+    "Id": "DTcameracontrols",
+    "Name": "Camera V1 (Buggy)",
+    "Url": "https://extensions.turbowarp.org/DT/cameracontrols.js",
+    "Color": "#ff4da7"
+  },
+  {
+    "Id": "theshovelcanvaseffects",
+    "Name": "Canvas Effects",
+    "Url": "https://extensions.turbowarp.org/TheShovel/CanvasEffects.js",
+    "Color": "#0FBD8C"
+  },
+  {
+    "Id": "lbdrawtest",
+    "Name": "RGB Channels",
+    "Url": "https://extensions.turbowarp.org/Longboost/color_channels.js",
+    "Color": "#aaaaaa"
+  },
+  {
+    "Id": "cst1229zip",
+    "Name": "Zip",
+    "Url": "https://extensions.turbowarp.org/CST1229/zip.js",
+    "Color": "#a49a3a"
+  },
+  {
+    "Id": "images",
+    "Name": "Images",
+    "Url": "https://extensions.turbowarp.org/CST1229/images.js",
+    "Color": "#0FBD8C"
+  },
+  {
+    "Id": "shovellzcompress",
+    "Name": "LZ Compress",
+    "Url": "https://extensions.turbowarp.org/TheShovel/LZ-String.js",
+    "Color": "#2f3463"
+  },
+  {
+    "Id": "0832rxfs2",
+    "Name": "rxFS",
+    "Url": "https://extensions.turbowarp.org/0832/rxFS2.js",
+    "Color": "#192d50"
+  },
+  {
+    "Id": "nexuskittensgrab",
+    "Name": "S-Grab",
+    "Url": "https://extensions.turbowarp.org/NexusKitten/sgrab.js",
+    "Color": "#ECA90B"
+  },
+  {
+    "Id": "nonameawagraph",
+    "Name": "Graphics 2D",
+    "Url": "https://extensions.turbowarp.org/NOname-awa/graphics2d.js",
+    "Color": "#ff976c"
+  },
+  {
+    "Id": "nonameawacomparisons",
+    "Name": "More Comparisons",
+    "Url": "https://extensions.turbowarp.org/NOname-awa/more-comparisons.js",
+    "Color": "#00a889"
+  },
+  {
+    "Id": "jeremygamerTweening",
+    "Name": "Tween",
+    "Url": "https://extensions.turbowarp.org/JeremyGamer13/tween.js",
+    "Color": "#0FBD8C"
+  },
+  {
+    "Id": "RixxyX",
+    "Name": "RixxyX",
+    "Url": "https://extensions.turbowarp.org/rixxyx.js",
+    "Color": "#773c00"
+  },
+  {
+    "Id": "lmsutilsblocks",
+    "Name": "Lily's Toolbox",
+    "Url": "https://extensions.turbowarp.org/Lily/lmsutils.js",
+    "Color": "#3bb2ed"
+  },
+  {
+    "Id": "qxsckdataanalysis",
+    "Name": "Data Analysis",
+    "Url": "https://extensions.turbowarp.org/qxsck/data-analysis.js",
+    "Color": "#0FBD8C"
+  },
+  {
+    "Id": "qxsckvarandlist",
+    "Name": "Variable and list",
+    "Url": "https://extensions.turbowarp.org/qxsck/var-and-list.js",
+    "Color": "#FF661A"
+  },
+  {
+    "Id": "verctedictionaries",
+    "Name": "Dictionaries",
+    "Url": "https://extensions.turbowarp.org/vercte/dictionaries.js",
+    "Color": "#008cff"
+  },
+  {
+    "Id": "gsaHTTPRequests",
+    "Name": "HTTP",
+    "Url": "https://extensions.turbowarp.org/godslayerakp/http.js",
+    "Color": "#307eff"
+  },
+  {
+    "Id": "gsaWebsocket",
+    "Name": "WebSocket",
+    "Url": "https://extensions.turbowarp.org/godslayerakp/ws.js",
+    "Color": "#307eff"
+  },
+  {
+    "Id": "cubesterWebhooks",
+    "Name": "Webhooks",
+    "Url": "https://extensions.turbowarp.org/CubesterYT/Webhooks.js",
+    "Color": "#C73A63"
+  },
+  {
+    "Id": "lmscomments",
+    "Name": "Comment Blocks",
+    "Url": "https://extensions.turbowarp.org/Lily/CommentBlocks.js",
+    "Color": "#e4db8c"
+  },
+  {
+    "Id": "longvegdictionary",
+    "Name": "Longman Dictionary",
+    "Url": "https://extensions.turbowarp.org/veggiecan/LongmanDictionary.js",
+    "Color": "#6BBBD1"
+  },
+  {
+    "Id": "alestorenfc",
+    "Name": "NFCWarp",
+    "Url": "https://extensions.turbowarp.org/Alestore/nfcwarp.js",
+    "Color": "#FF4646"
+  },
+  {
+    "Id": "nishiowoDectalk",
+    "Name": "DECtalk Text to Speech",
+    "Url": "https://extensions.turbowarp.org/NishiOwO/dectalk.js",
+    "Color": "#b3353f"
+  },
+  {
+    "Id": "steamworks",
+    "Name": "Steamworks",
+    "Url": "https://extensions.turbowarp.org/steamworks.js",
+    "Color": "#136C9F"
+  },
+  {
+    "Id": "itch",
+    "Name": "itch.io",
+    "Url": "https://extensions.turbowarp.org/itchio.js",
+    "Color": "#858585"
+  },
+  {
+    "Id": "GameJoltAPI",
+    "Name": "Game Jolt",
+    "Url": "https://extensions.turbowarp.org/gamejolt.js",
+    "Color": "#2F7F6F"
+  },
+  {
+    "Id": "NGIO",
+    "Name": "Newgrounds",
+    "Url": "https://extensions.turbowarp.org/obviousAlexC/newgroundsIO.js",
+    "Color": "#EB7522"
+  },
+  {
+    "Id": "lmsmcutils",
+    "Name": "McUtils",
+    "Url": "https://extensions.turbowarp.org/Lily/McUtils.js",
+    "Color": "#ec2020"
+  }
+]

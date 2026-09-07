@@ -10,6 +10,21 @@ For importing existing projects, the complete specification of `project`, `origi
 
 ## Complete Alias Set
 
+For a shorter introduction, see [Start here](quick-start.md). The desktop Guide
+includes both documents. [Project tools](project-tools.md) covers media editing,
+TurboWarp declarations, appearance, and safe compatibility exports.
+
+Custom extensions use the target-level declaration:
+
+~~~text
+extension ID ["https://extension-url.js" ["#RRGGBB"]]
+~~~
+
+Square brackets above indicate optional parts, not literal syntax. Quote an ID
+that starts with a digit. URLs must use HTTPS and colors must have six hexadecimal
+digits. These declarations preserve extensionURLs and extensionColors in the
+project. Use the generic opcode forms below for extension blocks that have no alias.
+
 This table is the compiler's complete native alias catalog. Arguments marked `Input` accept expressions; `Field` arguments are Scratch dropdown/data fields; `Menu` arguments generate canonical Scratch menu shadows. Reporter and Boolean aliases are used as functions inside expressions. Hat aliases start with `@`. C-block aliases end in `:` and own indented bodies.
 
 <!-- ALIAS_TABLE_START -->

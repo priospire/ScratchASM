@@ -4,6 +4,8 @@ public sealed record CtsColorSpan(int Start, int Length, string Color, string Ki
 
 public static class CtsSyntaxClassifier
 {
+    private static readonly IReadOnlyDictionary<string, CtsAliasDefinition> Aliases =
+        CtsBlockRegistry.Definitions.GroupBy(item => item.Name).ToDictionary(group => group.Key, group => group.First(), StringComparer.Ordinal);
     private static readonly HashSet<string> CostumeDrawingWords = new(StringComparer.Ordinal)
     {
         "rect", "line", "circle", "ellipse", "path", "text",
@@ -74,7 +76,7 @@ public static class CtsSyntaxClassifier
                 "clone" => "control.clone",
                 string value => value
             };
-            return CtsBlockRegistry.Definitions.FirstOrDefault(definition => definition.Name == name)?.CategoryColor
+            return Aliases.GetValueOrDefault(name)?.CategoryColor
                 ?? ScratchCategoryColors.Events;
         }
 
@@ -157,6 +159,10 @@ public static class CtsSyntaxClassifier
 
         if (token.Kind == CtsTokenKind.Identifier)
         {
+            string? nativeColor = CtsBlockRegistry.GetOpcodeColor(token.Text);
+            if (nativeColor is not null) return nativeColor;
+            string prefix = token.Text.Split('_')[0];
+            if (context.ExtensionColors.TryGetValue(prefix, out string? extensionColor)) return extensionColor;
             if (context.Broadcasts.Contains(token.Text))
             {
                 return ScratchCategoryColors.Events;
@@ -172,8 +178,7 @@ public static class CtsSyntaxClassifier
                 return ScratchCategoryColors.Variables;
             }
 
-            CtsAliasDefinition? exactAlias = CtsBlockRegistry.Definitions.FirstOrDefault(
-                definition => string.Equals(definition.Name, token.Text, StringComparison.Ordinal));
+            CtsAliasDefinition? exactAlias = Aliases.GetValueOrDefault(token.Text);
             if (exactAlias is not null)
             {
                 return exactAlias.CategoryColor;
@@ -217,6 +222,8 @@ public static class CtsSyntaxClassifier
                 {
                     return opcodeColor;
                 }
+                string prefix = token.Text[1..^1].Split('_')[0];
+                if (context.ExtensionColors.TryGetValue(prefix, out string? extensionColor)) return extensionColor;
             }
 
             return ScratchCategoryColors.StringLiteral;
@@ -248,6 +255,16 @@ public static class CtsSyntaxClassifier
         HashSet<int> costumeTokenStarts = [];
         HashSet<int> variableTokenStarts = [];
         HashSet<int> operatorTokenStarts = [];
+        Dictionary<string, string> extensionColors = TurboWarpExtensionCatalog.Entries.GroupBy(entry => entry.Id)
+            .ToDictionary(group => group.Key, group => group.First().Color, StringComparer.Ordinal);
+        for (int i = 0; i + 1 < tokens.Count; i++)
+        {
+            if (tokens[i].Text != "extension" || tokens[i + 1].Kind is not (CtsTokenKind.Identifier or CtsTokenKind.String)) continue;
+            string color = extensionColors.GetValueOrDefault(tokens[i + 1].Text.Trim('"'), ScratchCategoryColors.Extensions);
+            if (i + 3 < tokens.Count && tokens[i + 3].Span.Start.Line == tokens[i].Span.Start.Line &&
+                System.Text.RegularExpressions.Regex.IsMatch(tokens[i + 3].Text, "^\"#[0-9a-fA-F]{6}\"$")) color = tokens[i + 3].Text[1..^1];
+            extensionColors[tokens[i + 1].Text.Trim('"')] = color;
+        }
 
         for (int index = 0; index < tokens.Count; index++)
         {
@@ -392,7 +409,8 @@ public static class CtsSyntaxClassifier
             myBlockTokenStarts,
             costumeTokenStarts,
             variableTokenStarts,
-            operatorTokenStarts);
+            operatorTokenStarts,
+            extensionColors);
     }
 
     private static string GetAssignmentColor(
@@ -401,9 +419,11 @@ public static class CtsSyntaxClassifier
         ClassificationContext context)
     {
         CtsToken token = tokens[tokenIndex];
-        CtsToken[] lineTokens = tokens
-            .Where(candidate => candidate.Span.Start.Line == token.Span.Start.Line)
-            .ToArray();
+        int first = tokenIndex;
+        int last = tokenIndex + 1;
+        while (first > 0 && tokens[first - 1].Span.Start.Line == token.Span.Start.Line) first--;
+        while (last < tokens.Count && tokens[last].Span.Start.Line == token.Span.Start.Line) last++;
+        IEnumerable<CtsToken> lineTokens = Enumerable.Range(first, last - first).Select(index => tokens[index]);
 
         if (lineTokens.Any(candidate => context.CostumeTokenStarts.Contains(candidate.Start)) ||
             lineTokens.Any(candidate => candidate.Text is "state" or "costume" or "center" or "rotationStyle"))
@@ -467,5 +487,6 @@ public static class CtsSyntaxClassifier
         IReadOnlySet<int> MyBlockTokenStarts,
         IReadOnlySet<int> CostumeTokenStarts,
         IReadOnlySet<int> VariableTokenStarts,
-        IReadOnlySet<int> OperatorTokenStarts);
+        IReadOnlySet<int> OperatorTokenStarts,
+        IReadOnlyDictionary<string, string> ExtensionColors);
 }

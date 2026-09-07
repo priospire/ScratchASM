@@ -5,10 +5,12 @@ namespace OpenCTS.LanguageServices;
 public static class SymbolIndex
 {
     public static IReadOnlyList<ScratchAsmSymbol> Create(string source)
+        => Create(CtsParser.Parse(source).CompilationUnit);
+
+    public static IReadOnlyList<ScratchAsmSymbol> Create(CtsCompilationUnit unit)
     {
-        CtsParseResult parse = CtsParser.Parse(source);
         List<ScratchAsmSymbol> symbols = [];
-        foreach (CtsFileDeclaration declaration in parse.CompilationUnit.FileDeclarations)
+        foreach (CtsFileDeclaration declaration in unit.FileDeclarations)
         {
             switch (declaration)
             {
@@ -34,7 +36,7 @@ public static class SymbolIndex
             }
         }
 
-        foreach (CtsTargetDeclaration target in parse.CompilationUnit.Targets)
+        foreach (CtsTargetDeclaration target in unit.Targets)
         {
             Add(symbols, target.Name, ScratchAsmSymbolKind.Target, target.Span, detail: target.IsStage ? "stage" : "sprite");
             foreach (CtsTargetMember member in target.Members)
@@ -113,4 +115,3 @@ public static class SymbolIndex
         symbols.Add(new ScratchAsmSymbol(name, kind, new ScratchAsmTextRange(span.Start, span.End), container, detail));
     }
 }
-

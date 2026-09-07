@@ -17,7 +17,7 @@ public sealed class ScratchAsmLanguageService
     public DocumentAnalysis Analyze(string source, string sourceName = "document.sasm", int version = 0) =>
         _analyzer.Analyze(source, sourceName, version);
 
-    public IReadOnlyList<ScratchAsmCompletion> GetCompletions(string source, int position)
+    public IReadOnlyList<ScratchAsmCompletion> GetCompletions(string source, int position, IReadOnlyList<ScratchAsmSymbol>? knownSymbols = null)
     {
         position = Math.Clamp(position, 0, source.Length);
         string prefix = PrefixAt(source, position);
@@ -27,7 +27,7 @@ public sealed class ScratchAsmLanguageService
             definition.Name,
             definition.Shape.ToString().ToLowerInvariant(),
             definition.Opcode));
-        IEnumerable<ScratchAsmCompletion> symbols = SymbolIndex.Create(source).Select(symbol => new ScratchAsmCompletion(
+        IEnumerable<ScratchAsmCompletion> symbols = (knownSymbols ?? SymbolIndex.Create(source)).Select(symbol => new ScratchAsmCompletion(
             symbol.Name,
             symbol.Name,
             symbol.Kind.ToString().ToLowerInvariant(),

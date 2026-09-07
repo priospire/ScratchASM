@@ -12,6 +12,7 @@ public sealed partial class MainForm : Form
     private readonly CheckBox _attemptRepairCheckBox = new();
     private readonly CheckBox _darkModeCheckBox = new();
     private readonly System.Windows.Forms.Timer _diagnosticsTimer = new() { Interval = 350 };
+    private readonly System.Windows.Forms.Timer _syntaxTimer = new() { Interval = 60 };
     private readonly List<DiagnosticDisplaySpan> _displayedDiagnostics = [];
 
     private UiTheme _theme = UiTheme.Dark;
@@ -20,6 +21,7 @@ public sealed partial class MainForm : Form
     private bool _isApplyingHighlight;
     private bool _isBusy;
     private int _diagnosticsVersion;
+    private int _fullyColoredVersion = -1;
 
     public MainForm(string? initialPath = null, bool persistPreferences = true)
     {
@@ -31,10 +33,13 @@ public sealed partial class MainForm : Form
         Font = new Font("Segoe UI", 9F);
 
         _diagnosticsTimer.Tick += DiagnosticsTimer_Tick;
+        _syntaxTimer.Tick += (_, _) => { _syntaxTimer.Stop(); HighlightVisibleSource(); };
+        _sourceEditor.ViewportChanged += (_, _) => { if (_fullyColoredVersion != _diagnosticsVersion) _syntaxTimer.Start(); };
         Controls.Add(BuildLayout());
         InitializeIde();
         ApplyTheme();
         SetStatus("Ready.", _theme.Muted);
+        if (initialPath is null) Shown += async (_, _) => await RefreshProjectAsync();
         if (initialPath is not null) Shown += (_, _) =>
         {
             _inputPathTextBox.Text = initialPath;
@@ -465,6 +470,7 @@ public sealed partial class MainForm : Form
             }
             if (IsDisposed) return false;
             _loadedPath = fullPath;
+            _assetUndo = null;
             _inputPathTextBox.Text = fullPath;
             _editSession = session;
             _editSessionPath = session is null ? null : fullPath;
@@ -478,6 +484,7 @@ public sealed partial class MainForm : Form
             UpdateDocumentTitle();
             if (issues.Count > 0) ShowIssues(issues, "Input diagnostics", _theme.Warning);
             else SetStatus($"Opened {Path.GetFileName(fullPath)}", _theme.Success);
+            _ = RefreshProjectAsync();
             return true;
         }
         catch (Exception ex) when (IsDocumentError(ex))
@@ -494,7 +501,7 @@ public sealed partial class MainForm : Form
         _isApplyingHighlight = true;
         try
         {
-            _sourceEditor.Text = text;
+            _sourceEditor.LoadSourceText(text);
         }
         finally
         {
@@ -520,6 +527,8 @@ public sealed partial class MainForm : Form
     {
         _diagnosticsTimer.Stop();
         _diagnosticsVersion++;
+        _syntaxTimer.Stop();
+        _syntaxTimer.Start();
 
 
         if (!_isBusy)
@@ -539,12 +548,17 @@ public sealed partial class MainForm : Form
         string name = IsScratchAsmPath(_loadedPath ?? "") ? _loadedPath! : "editor.sasm";
         try
         {
-            var analysis = await Task.Run(() => new OpenCTS.LanguageServices.DocumentAnalyzer().Analyze(source, name));
+            var colors = await Task.Run(() => CtsSyntaxClassifier.Classify(source));
             if (IsDisposed || version != _diagnosticsVersion || _isBusy) return;
-            _sourceEditor.ApplyColors(analysis.ColorSpans, _theme.EditorText, _theme.Muted, _theme.IsDark);
+            _sourceEditor.ApplyColors(colors, _theme.EditorText, _theme.Muted, _theme.IsDark);
+            _fullyColoredVersion = version;
+            _activity.Text = "Checking source...";
+            var analysis = await Task.Run(() => new OpenCTS.LanguageServices.DocumentAnalyzer().Analyze(source, name, includeColors: false));
+            if (IsDisposed || version != _diagnosticsVersion || _isBusy) return;
             UpdateOutline(analysis.Symbols);
+            _sourceEditor.SetCompletionSymbols(analysis.Symbols);
             ShowDiagnostics(analysis.Diagnostics.Select(item => new CtsDiagnostic(item.Code,
-                item.Severity == "error" ? DiagnosticSeverity.Error : DiagnosticSeverity.Warning, item.Message,
+                item.Severity switch { "error" => DiagnosticSeverity.Error, "warning" => DiagnosticSeverity.Warning, _ => DiagnosticSeverity.Info }, item.Message,
                 new SourceSpan(item.Range.Start, item.Range.End))).ToArray());
         }
         catch (Exception ex) when (IsDocumentError(ex)) { if (!IsDisposed) SetStatus(ex.Message, _theme.Error); }
@@ -553,6 +567,7 @@ public sealed partial class MainForm : Form
 
     private void ShowDiagnostics(IReadOnlyList<CtsDiagnostic> diagnostics)
     {
+        _sourceEditor.ApplyDiagnostics(diagnostics);
         _displayedDiagnostics.Clear();
         _statusTextBox.Clear();
         if (diagnostics.Count == 0)
@@ -561,13 +576,14 @@ public sealed partial class MainForm : Form
             return;
         }
 
-        foreach (CtsDiagnostic diagnostic in diagnostics)
+        foreach (CtsDiagnostic diagnostic in diagnostics.Take(200))
         {
-            Color color = diagnostic.Severity == DiagnosticSeverity.Error ? _theme.Error : _theme.Warning;
+            Color color = DiagnosticColor(diagnostic.Severity);
             AppendStatusLine(FormatDiagnostic(diagnostic), color, diagnostic.Span);
         }
 
         _statusTextBox.Select(0, 0);
+        if (diagnostics.Count > 200) AppendStatusLine($"{diagnostics.Count - 200} more diagnostics. Fix the first errors and check again.", _theme.Muted, null);
     }
 
     private void ShowIssues(IReadOnlyList<ValidationIssue> issues, string header, Color headerColor)
@@ -577,7 +593,7 @@ public sealed partial class MainForm : Form
         AppendStatusLine(header, headerColor, null);
         foreach (ValidationIssue issue in issues)
         {
-            Color color = issue.Severity == DiagnosticSeverity.Error ? _theme.Error : _theme.Warning;
+            Color color = DiagnosticColor(issue.Severity);
             AppendStatusLine(Program.FormatIssue(issue), color, issue.Span);
         }
 
@@ -611,6 +627,13 @@ public sealed partial class MainForm : Form
         return $"{diagnostic.Severity} {diagnostic.Code} line {diagnostic.Span.Start.Line}, column {diagnostic.Span.Start.Column}: {diagnostic.Message}";
     }
 
+    private Color DiagnosticColor(DiagnosticSeverity severity) => severity switch
+    {
+        DiagnosticSeverity.Error => _theme.Error,
+        DiagnosticSeverity.Warning => _theme.Warning,
+        _ => Color.FromArgb(80, 180, 235)
+    };
+
     private void StatusTextBox_MouseDoubleClick(object? sender, MouseEventArgs e)
     {
         int characterIndex = _statusTextBox.GetCharIndexFromPosition(e.Location);
@@ -628,8 +651,18 @@ public sealed partial class MainForm : Form
         _sourceEditor.Focus();
     }
 
-    private void ApplyScratchAsmHighlighting() =>
-        _sourceEditor.ApplyColors(CtsSyntaxClassifier.Classify(_sourceEditor.Text), _theme.EditorText, _theme.Muted, _theme.IsDark);
+    private void HighlightVisibleSource()
+    {
+        if (_isBusy || _packageOnly || !_sourceEditor.IsHandleCreated || _fullyColoredVersion == _diagnosticsVersion) return;
+        (int start, int length) = _sourceEditor.VisibleRange();
+        string text = _sourceEditor.Text;
+        length = Math.Min(length, 20000);
+        if (start + length > text.Length) return;
+        var colors = CtsSyntaxClassifier.Classify(text.Substring(start, length))
+            .Select(span => span with { Start = span.Start + start }).ToArray();
+        _sourceEditor.ApplyColors(colors, _theme.EditorText, _theme.Muted, _theme.IsDark);
+    }
+    private void ApplyScratchAsmHighlighting() => ScheduleDiagnostics();
 
     private void DarkModeCheckBox_CheckedChanged(object? sender, EventArgs e)
     {
@@ -641,6 +674,7 @@ public sealed partial class MainForm : Form
 
     private void ApplyTheme()
     {
+        _theme = CreateCustomTheme();
         BackColor = _theme.Background;
         ForeColor = _theme.Text;
         ApplyThemeToControl(this);
@@ -653,6 +687,7 @@ public sealed partial class MainForm : Form
         _sourceEditor.GutterColor = _theme.Muted;
         _documentLabel.ForeColor = _theme.Success;
         if (_ideTools is not null) _ideTools.BackColor = _theme.Surface;
+        ApplyWorkspaceTheme();
     }
 
     private void ApplyThemeToControl(Control control)
@@ -701,7 +736,9 @@ public sealed partial class MainForm : Form
         _inputPathTextBox.Enabled = !busy;
         _outputPathTextBox.Enabled = !busy;
         if (_ideTools is not null) _ideTools.Enabled = !busy;
+        if (_inspector is not null) _inspector.Enabled = !busy;
         UseWaitCursor = busy;
+        if (_progress is not null) _progress.Active = busy && _preferences.Animations;
         _attemptRepairCheckBox.Enabled = !busy;
     }
 
@@ -732,6 +769,9 @@ public sealed partial class MainForm : Form
         if (disposing)
         {
             _diagnosticsTimer.Dispose();
+            _syntaxTimer.Dispose();
+            _soundOutput?.Dispose();
+            _soundReader?.Dispose();
             if (_ideTools is not null)
                 foreach (ToolStripItem item in _ideTools.Items) item.Image?.Dispose();
         }
@@ -759,16 +799,16 @@ public sealed partial class MainForm : Form
     {
         public static UiTheme Dark { get; } = new(
             true,
-            Color.FromArgb(30, 30, 32),
-            Color.FromArgb(38, 38, 41),
-            Color.FromArgb(35, 35, 38),
-            Color.FromArgb(27, 27, 29),
-            Color.FromArgb(35, 35, 38),
+            Color.FromArgb(12, 12, 14),
+            Color.FromArgb(21, 21, 24),
+            Color.FromArgb(17, 17, 20),
+            Color.FromArgb(14, 14, 16),
+            Color.FromArgb(16, 16, 19),
             Color.FromArgb(229, 234, 242),
             Color.FromArgb(229, 234, 242),
             Color.FromArgb(149, 160, 177),
-            Color.FromArgb(31, 117, 84),
-            Color.FromArgb(26, 94, 69),
+            Color.FromArgb(0, 156, 168),
+            Color.FromArgb(0, 116, 126),
             Color.FromArgb(34, 197, 94),
             Color.FromArgb(245, 158, 11),
             Color.FromArgb(239, 68, 68));

@@ -54,6 +54,33 @@ static class Program
 
         bool overwrite = args.Contains("--overwrite", StringComparer.OrdinalIgnoreCase);
         args = args.Where(arg => !arg.Equals("--overwrite", StringComparison.OrdinalIgnoreCase)).ToArray();
+        if (args.Length == 3 && args[0] is "--optimize" or "--vanilla")
+        {
+            try
+            {
+                string input = Path.GetFullPath(args[1]), output = Path.GetFullPath(args[2]);
+                if (input.Equals(output, StringComparison.OrdinalIgnoreCase)) throw new IOException("Choose a different output path.");
+                ScratchProjectDocument document;
+                ScratchProjectEditSession? session;
+                if (ScratchAsmLanguage.IsSupportedSourceName(input))
+                {
+                    string source = File.ReadAllText(input);
+                    session = ScratchProjectEditSession.OpenSourceCompanion(source, input);
+                    document = session?.Materialize(source) ?? ScratchProjectDocument.Compile(source);
+                }
+                else { session = ScratchProjectEditSession.Open(input); document = session.Materialize(session.SourceText); }
+                if (session is not null && output.Equals(session.InputPath, StringComparison.OrdinalIgnoreCase)) throw new IOException("The asset companion is protected.");
+                ProjectToolReport report = ScratchCompatibility.Optimize(document, args[0] == "--vanilla");
+                foreach (string change in report.Changes) Console.WriteLine(change);
+                foreach (ValidationIssue issue in report.Issues) Console.Error.WriteLine(FormatIssue(issue));
+                if (args[0] == "--vanilla" && !report.CanExportVanilla) return 1;
+                report.Document.Write(output, overwrite);
+                Console.WriteLine("Wrote " + output);
+                return 0;
+            }
+            catch (Exception ex) when (ex is IOException or InvalidDataException or UnauthorizedAccessException or ArgumentException or System.Text.Json.JsonException or InvalidOperationException)
+            { Console.Error.WriteLine(ex.Message); return 1; }
+        }
         bool decompile = args.Length == 3 && args[0].Equals("--decompile", StringComparison.OrdinalIgnoreCase);
         if (decompile) args = args[1..];
         bool hasRepairSwitch = args.Length > 0 &&
@@ -67,6 +94,7 @@ static class Program
             Console.Error.WriteLine("       ScratchASM --emit-aliases <output-folder>");
             Console.Error.WriteLine("       ScratchASM [--decompile] <input.sb3> <output.sasm> [--overwrite]");
             Console.Error.WriteLine("       ScratchASM --open <input.sasm|input.sb3>");
+            Console.Error.WriteLine("       ScratchASM --optimize|--vanilla <input.sasm|input.sb3> <output.sb3> [--overwrite]");
             return 2;
         }
 

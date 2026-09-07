@@ -29,6 +29,31 @@ public sealed class ScratchProjectEditSession
 
     public bool CanEdit => !Issues.Any(static issue => issue.Severity == DiagnosticSeverity.Error);
 
+    public ScratchProjectDocument Materialize(string source)
+    {
+        if (!CanEdit) throw new InvalidDataException("Repair the project before editing assets.");
+        if (WithoutProjectReference(source) == WithoutProjectReference(SourceText)) return new ScratchProjectDocument(_baseline.Project, _baseline.Entries);
+        CtsCompileResult compiled = CtsCompiler.Compile(source, "editor.sasm");
+        List<ValidationIssue> issues = compiled.Diagnostics.Select(ToIssue).ToList();
+        if (issues.Any(issue => issue.Severity == DiagnosticSeverity.Error))
+            throw new InvalidDataException(string.Join(Environment.NewLine, issues.Select(issue => issue.Message)));
+        ScratchMergeOutput? merged = ScratchProjectMerger.Merge(_baseline, compiled, source, _originMap, issues);
+        if (merged is null || issues.Any(issue => issue.Severity == DiagnosticSeverity.Error))
+            throw new InvalidDataException(string.Join(Environment.NewLine, issues.Select(issue => issue.Message)));
+        return new ScratchProjectDocument(merged.Project, merged.Entries);
+    }
+
+    internal static ScratchProjectEditSession FromDocument(ScratchProjectDocument document)
+    {
+        Dictionary<string, byte[]> entries = new(document.Assets) { ["project.json"] = document.JsonBytes };
+        var validation = Validate(entries["project.json"], entries);
+        if (validation.Any(issue => issue.Severity == DiagnosticSeverity.Error))
+            throw new InvalidDataException(string.Join(Environment.NewLine, validation.Where(issue => issue.Severity == DiagnosticSeverity.Error).Select(issue => issue.Message)));
+        ScratchArchiveSnapshot snapshot = new(Path.Combine(Path.GetTempPath(), $"scratchasm-{Guid.NewGuid():N}.sb3"), document.Project.DeepClone().AsObject(), entries);
+        var decompilation = ScratchProjectDecompiler.Decompile(snapshot.Project);
+        return new ScratchProjectEditSession(snapshot, decompilation.SourceText, decompilation.Issues, decompilation.OriginMap);
+    }
+
     public static ScratchProjectEditSession Open(string inputPath)
     {
         ScratchArchiveSnapshot snapshot = ScratchPackageSnapshotReader.Read(inputPath);
@@ -36,7 +61,7 @@ public sealed class ScratchProjectEditSession
         if (validation.Any(issue => issue.Severity == DiagnosticSeverity.Error))
             return new ScratchProjectEditSession(snapshot, "", validation, new ScratchAsmOriginMap());
         ScratchProjectDecompilation decompilation = ScratchProjectDecompiler.Decompile(snapshot.Project);
-        return new ScratchProjectEditSession(snapshot, decompilation.SourceText, decompilation.Issues, decompilation.OriginMap);
+        return new ScratchProjectEditSession(snapshot, decompilation.SourceText, validation.Concat(decompilation.Issues).ToArray(), decompilation.OriginMap);
     }
 
     public ConversionResult WriteEdited(string sourceText, string outputPath, bool overwrite = false)

@@ -26,9 +26,9 @@ public static class CtsCompiler
     public static CtsCompileResult Compile(string source, string? sourceName = null)
     {
         ArgumentNullException.ThrowIfNull(source);
-        if (source.Length > 8 * 1024 * 1024)
+        if (source.Length > 64 * 1024 * 1024)
         {
-            return LimitError("Source exceeds the 8 MiB supported size limit.");
+            return LimitError("Source exceeds the 64 MiB supported size limit.");
         }
         int nesting = 0;
         foreach (CtsToken token in CtsLexer.Lex(source))
@@ -170,9 +170,21 @@ public static class CtsCompiler
                 }
             };
 
+            JsonObject urls = [], colors = [];
+            foreach (CtsExtensionDeclaration extension in compilationUnit.Targets.SelectMany(target => target.Members).OfType<CtsExtensionDeclaration>())
+            {
+                if (extension.Url is not null) urls[extension.Name] = extension.Url;
+                if (extension.Color is not null) colors[extension.Name] = extension.Color;
+            }
+            if (urls.Count > 0) project["extensionURLs"] = urls;
+            if (colors.Count > 0) project["extensionColors"] = colors;
+
             byte[] projectJsonBytes = JsonSerializer.SerializeToUtf8Bytes(
                 project,
                 new JsonSerializerOptions { WriteIndented = true });
+
+            foreach (ValidationIssue issue in ScratchCompatibility.Inspect(project, projectJsonBytes.Length))
+                _diagnostics.Add(new CtsDiagnostic(issue.Code!, issue.Severity, issue.Message, compilationUnit.Span));
 
             return CreateResult(projectJsonBytes);
         }
@@ -207,6 +219,7 @@ public static class CtsCompiler
                 scriptIndex++;
             }
 
+            Dictionary<string, CtsRawBlocksDeclaration> rawOwners = new(StringComparer.Ordinal);
             foreach (CtsRawBlocksDeclaration raw in target.Members.OfType<CtsRawBlocksDeclaration>())
             {
                 foreach ((string id, JsonNode? block) in JsonNode.Parse(raw.Json)!.AsObject())
@@ -214,7 +227,10 @@ public static class CtsCompiler
                     if (_currentBlocks.ContainsKey(id))
                         AddError("CTS1031", $"Duplicate raw block ID '{id}'.", raw.Span);
                     else
+                    {
                         _currentBlocks[id] = block?.DeepClone();
+                        rawOwners[id] = raw;
+                    }
                 }
             }
 
@@ -223,11 +239,13 @@ public static class CtsCompiler
                 using JsonDocument rawDocument = JsonDocument.Parse(_currentBlocks.ToJsonString());
                 List<ValidationIssue> issues = [];
                 ScratchProjectValidator.ValidateBlocks(rawDocument.RootElement, "$", JsonSourceMap.Empty, issues);
-                foreach (ValidationIssue issue in issues)
+                Dictionary<CtsRawBlocksDeclaration, JsonSourceMap> maps = new(ReferenceEqualityComparer.Instance);
+                foreach (ValidationIssue issue in issues.OrderBy(issue => issue.Severity).Take(200))
                 {
-                    CtsRawBlocksDeclaration owner = target.Members.OfType<CtsRawBlocksDeclaration>().FirstOrDefault(raw =>
-                        JsonNode.Parse(raw.Json)!.AsObject().ContainsKey(issue.JsonPath[2..])) ?? rawSource;
-                    SourceLocation location = JsonSourceMap.Create(Encoding.UTF8.GetBytes(owner.Json)).GetLocation(issue.JsonPath) ?? new SourceLocation(1, 1);
+                    CtsRawBlocksDeclaration owner = rawOwners.FirstOrDefault(pair => issue.JsonPath == "$." + pair.Key ||
+                        issue.JsonPath.StartsWith("$." + pair.Key + ".", StringComparison.Ordinal)).Value ?? rawSource;
+                    if (!maps.TryGetValue(owner, out JsonSourceMap? map)) maps[owner] = map = JsonSourceMap.Create(Encoding.UTF8.GetBytes(owner.Json));
+                    SourceLocation location = map.GetLocation(issue.JsonPath) ?? new SourceLocation(1, 1);
                     SourceLocation start = new(owner.Span.Start.Line + location.Line - 1,
                         location.Column + (location.Line == 1 ? owner.Span.Start.Column + 8 : 0));
                     _diagnostics.Add(new CtsDiagnostic(issue.Code ?? "CTS1031", issue.Severity, issue.Message, new SourceSpan(start, start)));

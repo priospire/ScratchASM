@@ -74,7 +74,7 @@ An unchanged source round trip retains the original `project.json` and every arc
 
 The converter validates readable JSON, field types, graph references, data references, required assets, and archive paths before writing output. Safe relative ZIP metadata folders are preserved during source round trips; assets referenced by Scratch still use root filenames. Duplicate ZIP entries, path traversal, malformed JSON, and cyclic graphs remain errors. Output writes use a temporary file followed by a move, so failed validation does not replace an existing output.
 
-Current limits are 4,096 archive entries, 128 MiB per entry, 512 MiB total expanded archive data, 8 MiB of source text, and 128 nested source delimiters. Large or structurally unusual targets use exact block form. Repair cannot reconstruct lost media or infer the intended behavior of ambiguous damaged code.
+Current limits are 4,096 archive entries, 128 MiB per entry, 512 MiB total expanded archive data, 64 MiB of source text, and 128 nested source delimiters. Large or structurally unusual targets use exact block form. Repair cannot reconstruct lost media or infer the intended behavior of ambiguous damaged code.
 
 ## Verification
 

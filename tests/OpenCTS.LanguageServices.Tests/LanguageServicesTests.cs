@@ -6,6 +6,14 @@ namespace OpenCTS.LanguageServices.Tests;
 public sealed class LanguageServicesTests
 {
     [TestMethod]
+    public void RawGraphsHaveInfoAndCompletionCanReuseTheBackgroundSymbolIndex()
+    {
+        var service = new ScratchAsmLanguageService();
+        var analysis = service.Analyze("stage {\n  var score = 0\n  rawblocks {}\n}\n");
+        Assert.IsTrue(analysis.Diagnostics.Any(issue => issue.Code == "SASM5001" && issue.Severity == "info"));
+        Assert.IsTrue(service.GetCompletions("sco", 3, analysis.Symbols).Any(item => item.Label == "score"));
+    }
+    [TestMethod]
     public void ProjectLoaderAcceptsSourcePathsWithoutParsingThemAsJson()
     {
         string directory = Directory.CreateTempSubdirectory("scratchasm-project-").FullName;

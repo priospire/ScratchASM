@@ -263,7 +263,9 @@ class ScratchAsmClient {
         diagnostic.range.end.character
       ),
       diagnostic.message,
-      diagnostic.severity === 1 ? vscode.DiagnosticSeverity.Error : vscode.DiagnosticSeverity.Warning
+      diagnostic.severity === 1 ? vscode.DiagnosticSeverity.Error :
+        diagnostic.severity === 2 ? vscode.DiagnosticSeverity.Warning :
+          diagnostic.severity === 3 ? vscode.DiagnosticSeverity.Information : vscode.DiagnosticSeverity.Hint
     ));
     this.diagnostics.set(uri, items);
   }

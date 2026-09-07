@@ -1,6 +1,9 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <ItemGroup>
+    <PackageReference Include="Svg" Version="3.4.8" />
+    <PackageReference Include="NAudio" Version="2.2.1" />
+    <EmbeddedResource Include="..\..\docs\*.md" Link="Help\%(Filename)%(Extension)" />
     <ProjectReference Include="..\OpenCTS.Core\OpenCTS.Core.csproj" />
     <ProjectReference Include="..\OpenCTS.LanguageServices\OpenCTS.LanguageServices.csproj" />
   </ItemGroup>

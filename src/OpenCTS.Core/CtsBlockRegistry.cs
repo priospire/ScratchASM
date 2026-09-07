@@ -59,6 +59,8 @@ public sealed record CtsAliasDefinition(
 public static class CtsBlockRegistry
 {
     private static readonly IReadOnlyList<CtsAliasDefinition> Aliases = CtsBlockCatalog.Create();
+    private static readonly IReadOnlyDictionary<string, string> OpcodeColors = Aliases.GroupBy(alias => alias.Opcode)
+        .ToDictionary(group => group.Key, group => group.First().CategoryColor, StringComparer.Ordinal);
 
     public static IReadOnlyList<CtsAliasDefinition> Definitions => Aliases;
 
@@ -176,10 +178,9 @@ public static class CtsBlockRegistry
 
     public static string? GetOpcodeColor(string opcode)
     {
-        CtsAliasDefinition? definition = Aliases.FirstOrDefault(alias => string.Equals(alias.Opcode, opcode, StringComparison.Ordinal));
-        if (definition is not null)
+        if (OpcodeColors.TryGetValue(opcode, out string? color))
         {
-            return definition.CategoryColor;
+            return color;
         }
 
         return opcode switch

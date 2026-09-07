@@ -38,13 +38,16 @@ internal sealed class ScratchProjectDecompiler
         ScratchProjectDecompiler decompiler = new(project);
         ScratchProjectDecompilation candidate = decompiler.Run();
         if (candidate.Issues.Any(issue => issue.Severity == DiagnosticSeverity.Error)) return candidate;
-        CtsCompileResult compiled = CtsCompiler.Compile(candidate.SourceText, "import.sasm");
         JsonArray originalTargets = project["targets"]!.AsArray();
+        if (originalTargets.Select((target, index) => (target, index)).All(item =>
+            decompiler._rawTargets.Contains(item.index) || item.target?["blocks"] is JsonObject { Count: 0 })) return candidate;
+        CtsCompileResult compiled = CtsCompiler.Compile(candidate.SourceText, "import.sasm");
         JsonArray? compiledTargets = compiled.ProjectJsonBytes.Length > 0
             ? JsonNode.Parse(compiled.ProjectJsonBytes)?["targets"] as JsonArray : null;
         HashSet<int> rawTargets = [];
         for (int i = 0; i < originalTargets.Count; i++)
         {
+            if (decompiler._rawTargets.Contains(i)) continue;
             if (compiledTargets is null || i >= compiledTargets.Count ||
                 !ScratchBlockGraph.Equivalent(originalTargets[i]!.AsObject(), compiledTargets[i]!.AsObject(),
                     candidate.OriginMap.Targets[i], candidate.OriginMap.Targets)) rawTargets.Add(i);
@@ -105,7 +108,13 @@ internal sealed class ScratchProjectDecompiler
                 if (extension is JsonValue value && value.TryGetValue(out string? extensionId) &&
                     !string.IsNullOrWhiteSpace(extensionId))
                 {
-                    source.Append("  extension ").AppendLine(ToIdentifier(extensionId, "extension"));
+                    source.Append("  extension ").Append(JsonSerializer.Serialize(extensionId));
+                    if (_project["extensionURLs"]?[extensionId] is JsonValue url && url.TryGetValue<string>(out string? address))
+                    {
+                        source.Append(' ').Append(JsonSerializer.Serialize(address));
+                        if (_project["extensionColors"]?[extensionId] is JsonValue color) source.Append(' ').Append(color.ToJsonString());
+                    }
+                    source.AppendLine();
                 }
             }
         }

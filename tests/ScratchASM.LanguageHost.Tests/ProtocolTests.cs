@@ -9,6 +9,20 @@ namespace ScratchASM.LanguageHost.Tests;
 public sealed class ProtocolTests
 {
     [TestMethod]
+    public void LspPreservesInformationalSeverity()
+    {
+        var messages = new LspDispatcher().Handle(Notification("textDocument/didOpen", new JsonObject
+        {
+            ["textDocument"] = new JsonObject
+            {
+                ["uri"] = "file:///workspace/raw.sasm", ["version"] = 1,
+                ["text"] = "stage {\n  rawblocks {}\n}\n"
+            }
+        }));
+        JsonNode info = messages.Single()["params"]!["diagnostics"]!.AsArray().Single(item => item?["code"]?.ToString() == "SASM5001")!;
+        Assert.AreEqual(3, info["severity"]!.GetValue<int>());
+    }
+    [TestMethod]
     public void MalformedProtocolParametersDoNotCrashDispatchers()
     {
         JsonObject response = new LspDispatcher().Handle(new JsonObject { ["id"] = 1, ["method"] = 7 }).Single();

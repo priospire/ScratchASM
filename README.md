@@ -14,7 +14,24 @@ Start the UI:
 .\ScratchASM.exe
 ```
 
-The IDE includes opaque dark/light themes, a project outline, line numbers, search, undo/redo, live diagnostics, source saving, and Scratch project export. Unsaved changes are protected when opening a different document or closing the IDE. Open files by browsing, typing a path, or dragging a file into the window.
+New projects start with a green-flag script that sets "my variable" to "Hello World!".
+The IDE has customizable opaque dark/light themes, dark title and status bars,
+native scrollbar theming, and exact Scratch category colors. Visible text colors
+first while full analysis runs in the background, including on multi-megabyte files.
+
+The editor includes line numbers, outline navigation, search, bounded undo/redo,
+context menus, automatic indentation and bracket pairing, completion suggestions,
+and error/warning/info underlines with hover details. Use Tab or Enter to accept
+a suggestion, or Ctrl+Space to request one.
+
+Choose **Guide** for the embedded documentation. **Project** shows the saved stage
+and sprite costumes, with buttons to add sprites, import .sprite3 files, and add
+costumes or WAV/MP3 sounds. This preview is not a runtime player. **Tools** contains
+appearance settings, extension search, optimization, and vanilla export.
+
+Unsaved changes are protected when opening a different document or closing.
+Browse, drag a file into the window, or enable **Tools > Input/output paths** to
+type paths. Start with the [quick guide](docs/quick-start.md).
 
 For development builds:
 
@@ -33,6 +50,8 @@ dotnet run --project src/OpenCTS.App -- samples/hello.sasm artifacts/hello-from-
 .\ScratchASM.exe game.sb3 game.sasm
 .\ScratchASM.exe game.sasm rebuilt.sb3
 .\ScratchASM.exe --open samples\roundtrip.sasm
+.\ScratchASM.exe --optimize game.sb3 compact.sb3
+.\ScratchASM.exe --vanilla game.sb3 vanilla.sb3
 ```
 
 The input can be:
@@ -51,6 +70,24 @@ Imported source comes with an adjacent `*.assets.sb3` companion containing costu
 - VS Code support is in `editors/vscode-scratchasm`; it provides Scratch-colored syntax, diagnostics, completions, and ScratchASM light/dark themes.
 - `ScratchASM.LanguageHost.exe` supports `--lsp` for editors and `--mcp --workspace <folder>` for MCP clients.
 - MCP tools include analysis, compile, decompile, merge edited source, repair, catalog lookup, and project info.
+
+## Extensions And Project Tools
+
+The bundled TurboWarp gallery has 104 entries. Generic opcode forms preserve
+extension inputs, fields, mutations, URLs, and category colors. This supports
+authoring and round trips, not running extension JavaScript inside the IDE or
+providing a native alias for every third-party block. Custom extensions produce
+a vanilla-compatibility warning.
+
+The IDE warns at 4.5 MiB of uncompressed project.json and flags projects over
+5 MiB. Compact / Optimize removes JSON whitespace and folds safe constant
+arithmetic, including calculations used in variable assignments and list indices.
+It does not delete data, change variable scope, or promise a speedup for every project.
+
+Vanilla export additionally lowers supported literal Bitwise operations to native
+Scratch blocks. Unsupported extensions, extension monitors, runtime settings, or
+JSON that still exceeds the budget stop the export without deleting content.
+Both tools write separate outputs. See [project tools and limits](docs/project-tools.md).
 
 ## Validation
 
@@ -78,6 +115,8 @@ npm --prefix editors/vscode-scratchasm test
 npm --prefix tools/runtime-smoke ci
 npm --prefix tools/runtime-smoke test
 npm --prefix tools/runtime-smoke run test:fixtures
+node tools/runtime-smoke/project-tools.cjs
+node tools/runtime-smoke/host-smoke.cjs
 .\tools\publish.ps1
 ```
 

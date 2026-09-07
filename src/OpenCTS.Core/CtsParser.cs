@@ -780,14 +780,32 @@ public static class CtsParser
         CtsLineScanner scanner = new(trimmed, lineNumber, startColumn);
         scanner.ConsumeWord("extension");
         scanner.SkipWhitespace();
-        string? name = scanner.ReadIdentifier();
+        string? name = scanner.Peek() == '"' ? (scanner.ReadValue(diagnostics) as CtsStringValue)?.Text : scanner.ReadIdentifier();
         if (name is null)
         {
             AddError(diagnostics, "Expected an extension name.", scanner.PointSpan());
             return null;
         }
 
-        return new CtsExtensionDeclaration(name, memberSpan);
+        scanner.SkipWhitespace();
+        string? url = null;
+        string? color = null;
+        if (!scanner.End)
+        {
+            if (scanner.ReadValue(diagnostics) is CtsStringValue value &&
+                Uri.TryCreate(value.Text, UriKind.Absolute, out Uri? uri) && uri.Scheme == "https") url = value.Text;
+            else AddError(diagnostics, "Extension URL must be a quoted HTTPS address.", scanner.PointSpan());
+            scanner.SkipWhitespace();
+            if (!scanner.End)
+            {
+                if (scanner.ReadValue(diagnostics) is CtsStringValue shade &&
+                    System.Text.RegularExpressions.Regex.IsMatch(shade.Text, "^#[0-9a-fA-F]{6}$")) color = shade.Text;
+                else AddError(diagnostics, "Extension color must be a quoted #RRGGBB value.", scanner.PointSpan());
+                scanner.SkipWhitespace();
+            }
+            if (!scanner.End) AddError(diagnostics, "Unexpected text after extension declaration.", scanner.PointSpan());
+        }
+        return new CtsExtensionDeclaration(name, memberSpan, url, color);
     }
 
     private static CtsStateDeclaration ParseStateDeclaration(
