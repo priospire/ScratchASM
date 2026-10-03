@@ -1858,10 +1858,12 @@
       "opcode": "control_all_at_once",
       "category": "control",
       "color": "#FFAB19",
-      "shape": "stack",
+      "shape": "cBlock",
       "bindings": [],
       "extension": null,
-      "substacks": [],
+      "substacks": [
+        "SUBSTACK"
+      ],
       "terminal": "linksNext",
       "legacy": true,
       "fixedFields": {},
@@ -1900,7 +1902,7 @@
       "opcode": "control_for_each",
       "category": "control",
       "color": "#FFAB19",
-      "shape": "stack",
+      "shape": "cBlock",
       "bindings": [
         {
           "name": "VARIABLE",
@@ -1920,7 +1922,9 @@
         }
       ],
       "extension": null,
-      "substacks": [],
+      "substacks": [
+        "SUBSTACK"
+      ],
       "terminal": "linksNext",
       "legacy": true,
       "fixedFields": {},
@@ -1945,7 +1949,7 @@
       "opcode": "control_while",
       "category": "control",
       "color": "#FFAB19",
-      "shape": "stack",
+      "shape": "cBlock",
       "bindings": [
         {
           "name": "CONDITION",
@@ -1957,7 +1961,9 @@
         }
       ],
       "extension": null,
-      "substacks": [],
+      "substacks": [
+        "SUBSTACK"
+      ],
       "terminal": "linksNext",
       "legacy": true,
       "fixedFields": {},

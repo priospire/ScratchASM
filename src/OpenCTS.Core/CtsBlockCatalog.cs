@@ -119,9 +119,9 @@ internal static class CtsBlockCatalog
             H("control.clone", "control_start_as_clone", c),
             S("control.createclone", "control_create_clone_of", c, M("CLONE_OPTION", "control_create_clone_of_menu")),
             new CtsAliasDefinition("control.deleteclone", "control_delete_this_clone", c, CtsBlockShape.Cap, [], TerminalPolicy: CtsTerminalPolicy.AlwaysCaps),
-            Legacy("legacy.control.while", "control_while", c, I("CONDITION")),
-            Legacy("legacy.control.foreach", "control_for_each", c, F("VARIABLE"), I("VALUE")),
-            Legacy("legacy.control.allatonce", "control_all_at_once", c),
+            C("legacy.control.while", "control_while", c, ["SUBSTACK"], I("CONDITION")) with { IsLegacy = true },
+            C("legacy.control.foreach", "control_for_each", c, ["SUBSTACK"], F("VARIABLE"), I("VALUE")) with { IsLegacy = true },
+            C("legacy.control.allatonce", "control_all_at_once", c, ["SUBSTACK"]) with { IsLegacy = true },
             LegacyReporter("legacy.control.counter", "control_get_counter", c),
             Legacy("legacy.control.incrcounter", "control_incr_counter", c),
             Legacy("legacy.control.clearcounter", "control_clear_counter", c)

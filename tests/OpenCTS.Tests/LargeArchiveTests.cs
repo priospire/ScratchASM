@@ -9,7 +9,7 @@ namespace OpenCTS.Tests;
 public sealed class LargeArchiveTests
 {
     [TestMethod]
-    public void LargeRawGraphsUseOneLinePerBlockAndPreserveEveryBlock()
+    public void LargeGraphsUseReadableStatementsAndPreserveEveryBlock()
     {
         var document = ScratchProjectDocument.Compile("stage {\n}\n");
         var blocks = document.Project["targets"]![0]!["blocks"]!.AsObject();
@@ -24,6 +24,8 @@ public sealed class LargeArchiveTests
                 { ["MESSAGE"] = new System.Text.Json.Nodes.JsonArray(1, new System.Text.Json.Nodes.JsonArray(10, "{ \" text \\ }")) }
             };
         var session = document.CreateSession();
+        StringAssert.Contains(session.SourceText, "looks.say");
+        Assert.IsFalse(session.SourceText.Contains("rawblocks", StringComparison.Ordinal));
         Assert.IsLessThan(1250, session.SourceText.Count(character => character == '\n'));
         var rebuilt = session.Materialize(session.SourceText + "\n# edited source\n");
         Assert.IsTrue(System.Text.Json.Nodes.JsonNode.DeepEquals(blocks, rebuilt.Project["targets"]![0]!["blocks"]));

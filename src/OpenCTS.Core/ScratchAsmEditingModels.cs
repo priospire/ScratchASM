@@ -25,11 +25,15 @@ internal sealed class ScratchTargetOrigin
     public Dictionary<string, ScratchDataOrigin> Broadcasts { get; } = new(StringComparer.Ordinal);
 
     public List<string> BlockOrder { get; } = [];
+
+    public List<string> RootOrder { get; } = [];
 }
 
 internal sealed class ScratchAsmOriginMap
 {
     public List<ScratchTargetOrigin> Targets { get; } = [];
+
+    public Lazy<JsonObject?>? CompiledBaseline { get; set; }
 }
 
 internal sealed record ScratchProjectDecompilation(

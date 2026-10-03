@@ -6,7 +6,9 @@ Compile `.sasm` into native Scratch `.sb3` files, import `.sb3` into editable so
 
 ## Run
 
-The root executables are stored with Git LFS. After cloning, run `git lfs pull` to download the binaries. A source-only download can build them with `tools/publish.ps1`.
+Download the Windows app directly: [ScratchASM.exe](https://github.com/priospire/ScratchASM/releases/latest/download/ScratchASM.exe).
+For editor integrations, also download [ScratchASM.LanguageHost.exe](https://github.com/priospire/ScratchASM/releases/latest/download/ScratchASM.LanguageHost.exe).
+The old Monocode release is obsolete. The root executables are stored with Git LFS; after cloning, run `git lfs pull` to download them. GitHub's source ZIP is not the app download. A source-only checkout can build both executables with `tools/publish.ps1`.
 
 Start the UI:
 
@@ -68,7 +70,7 @@ The input can be:
 
 Use `.sb3` for compiled output, or `.sasm` when importing a Scratch archive. Add `--overwrite` to replace an existing output.
 
-Imported source comes with an adjacent `*.assets.sb3` companion containing costumes, sounds, and original metadata. Keep it beside the `.sasm` file. Complex block graphs use editable `rawblocks` JSON for exact preservation. See [round-trip conversion](docs/round-trips.md) for the format, preservation rules, and limits.
+Imported source uses readable ScratchASM: assignments, expressions, control flow, `proc`/`call`, and block aliases. Large sprites no longer turn into JSON. The adjacent `*.assets.sb3` companion retains costumes, sounds, original graphs, and metadata; keep it beside the `.sasm` file. Unknown extension blocks may still need generic syntax. See [round-trip conversion](docs/round-trips.md) for preservation rules and limits.
 
 ## Editor And MCP Support
 

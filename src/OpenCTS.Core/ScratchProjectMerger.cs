@@ -81,11 +81,15 @@ internal static class ScratchProjectMerger
                 (isStage || string.Equals(target["name"]?.GetValue<string>(), originalName, StringComparison.Ordinal)));
             ScratchTargetOrigin? origin = originMap.Targets.FirstOrDefault(target =>
                 target.IsStage == isStage && (isStage || target.Name == originalName));
+            JsonObject? generated = (originMap.CompiledBaseline?.Value?["targets"] as JsonArray)?.OfType<JsonObject>()
+                .FirstOrDefault(target => target["isStage"]?.GetValue<bool>() == isStage &&
+                    (isStage || NodeString(target["name"]) == originalName));
+            bool unchangedCode = generated is not null && JsonNode.DeepEquals(generated["blocks"], compiledTarget["blocks"]);
 
             outputTargets.Add(baselineTarget is null || origin is null
                 ? compiledTarget.DeepClone()
                 : MergeTarget(baselineTarget, compiledTarget, origin, globalDataIds, dataNames,
-                    declaration));
+                    declaration, unchangedCode, generated?["blocks"] as JsonObject));
         }
 
         merged["targets"] = outputTargets;
@@ -197,17 +201,25 @@ internal static class ScratchProjectMerger
     }
 
     private static JsonObject MergeTarget(JsonObject baseline, JsonObject compiled, ScratchTargetOrigin origin,
-        Dictionary<string, string> dataIds, Dictionary<string, string> dataNames, CtsTargetDeclaration declaration)
+        Dictionary<string, string> dataIds, Dictionary<string, string> dataNames, CtsTargetDeclaration declaration, bool unchangedCode,
+        JsonObject? generatedBlocks)
     {
         JsonObject output = baseline.DeepClone().AsObject();
         JsonObject variables = RemapData(compiled["variables"] as JsonObject ?? [], origin.Variables, dataIds, baseline["variables"] as JsonObject ?? []);
         JsonObject lists = RemapData(compiled["lists"] as JsonObject ?? [], origin.Lists, dataIds, baseline["lists"] as JsonObject ?? []);
         JsonObject broadcasts = RemapData(compiled["broadcasts"] as JsonObject ?? [], origin.Broadcasts, dataIds, baseline["broadcasts"] as JsonObject ?? []);
         JsonObject compiledBlocks = compiled["blocks"] as JsonObject ?? [];
-        RemapDataReferences(compiledBlocks, dataIds, dataNames);
         HashSet<string> rawIds = declaration.Members.OfType<CtsRawBlocksDeclaration>()
             .SelectMany(raw => JsonNode.Parse(raw.Json)!.AsObject().Select(pair => pair.Key)).ToHashSet(StringComparer.Ordinal);
-        JsonObject blocks = PreserveBlockIdentity(baseline["blocks"] as JsonObject ?? [], compiledBlocks, origin.BlockOrder, rawIds);
+        var preserved = unchangedCode || generatedBlocks is null ? new ScratchBlockGraph.PreservedScripts([], []) :
+            ScratchBlockGraph.FindUnchangedScripts(baseline["blocks"] as JsonObject ?? [], generatedBlocks, compiledBlocks, origin.RootOrder, rawIds);
+        if (!unchangedCode)
+        {
+            RemapDataReferences(compiledBlocks, dataIds, dataNames);
+            RemapProcedureBindings(compiledBlocks, baseline["blocks"] as JsonObject ?? []);
+        }
+        JsonObject blocks = unchangedCode ? (baseline["blocks"]?.DeepClone().AsObject() ?? []) :
+            PreserveBlockIdentity(baseline["blocks"] as JsonObject ?? [], compiledBlocks, origin.BlockOrder, rawIds, preserved);
 
         output["isStage"] = compiled["isStage"]?.DeepClone();
         output["name"] = compiled["name"]?.DeepClone();
@@ -238,6 +250,49 @@ internal static class ScratchProjectMerger
         }
 
         return output;
+    }
+
+    private static void RemapProcedureBindings(JsonObject compiled, JsonObject baseline)
+    {
+        Dictionary<string, JsonObject> prototypes = new(StringComparer.Ordinal);
+        foreach (JsonObject block in baseline.Select(pair => pair.Value).OfType<JsonObject>())
+            if (NodeString(block["opcode"]) == "procedures_prototype" && block["mutation"] is JsonObject mutation &&
+                NodeString(mutation["proccode"]) is string code) prototypes.TryAdd(code, mutation);
+        Dictionary<string, Dictionary<string, string>> parameters = new(StringComparer.Ordinal);
+        foreach (JsonObject block in compiled.Select(pair => pair.Value).OfType<JsonObject>())
+        {
+            if (NodeString(block["opcode"]) != "procedures_prototype" || block["mutation"] is not JsonObject mutation ||
+                NodeString(mutation["proccode"]) is not string code || !prototypes.TryGetValue(code, out JsonObject? original)) continue;
+            string[] ids = ReadArray(mutation, "argumentids"), names = ReadArray(mutation, "argumentnames");
+            string[] oldIds = ReadArray(original, "argumentids"), oldNames = ReadArray(original, "argumentnames");
+            if (ids.Length != oldIds.Length || names.Length != oldNames.Length || ids.Length != names.Length) continue;
+            var idMap = ids.Select((id, i) => (id, oldIds[i])).ToDictionary(pair => pair.id, pair => pair.Item2, StringComparer.Ordinal);
+            parameters[code] = idMap;
+            var nameMap = names.Select((name, i) => (name, oldNames[i])).GroupBy(pair => pair.name)
+                .ToDictionary(group => group.Key, group => group.Last().Item2, StringComparer.Ordinal);
+            mutation["argumentnames"] = original["argumentnames"]?.DeepClone();
+            if (NodeString(block["parent"]) is not string definition) continue;
+            foreach (string id in ScratchBlockGraph.Component(compiled, definition))
+                if (compiled[id] is JsonObject reporter && NodeString(reporter["opcode"]) is "argument_reporter_string_number" or "argument_reporter_boolean" &&
+                    reporter["fields"]?["VALUE"] is JsonArray field && NodeString(field[0]) is string name && nameMap.TryGetValue(name, out string? previous)) field[0] = previous;
+        }
+        foreach (JsonObject block in compiled.Select(pair => pair.Value).OfType<JsonObject>())
+        {
+            if (NodeString(block["opcode"]) is not ("procedures_prototype" or "procedures_call") ||
+                block["mutation"] is not JsonObject mutation || NodeString(mutation["proccode"]) is not string code ||
+                !parameters.TryGetValue(code, out var idMap)) continue;
+            string[] ids = ReadArray(mutation, "argumentids");
+            mutation["argumentids"] = JsonSerializer.Serialize(ids.Select(id => idMap.GetValueOrDefault(id, id)));
+            JsonObject inputs = [];
+            foreach ((string id, JsonNode? input) in block["inputs"] as JsonObject ?? []) inputs[idMap.GetValueOrDefault(id, id)] = input?.DeepClone();
+            block["inputs"] = inputs;
+        }
+
+        static string[] ReadArray(JsonObject mutation, string name)
+        {
+            try { return JsonSerializer.Deserialize<string[]>(NodeString(mutation[name]) ?? "[]") ?? []; }
+            catch (JsonException) { return []; }
+        }
     }
 
     private static JsonObject RemapData(
@@ -329,11 +384,13 @@ internal static class ScratchProjectMerger
         }
     }
 
-    private static JsonObject PreserveBlockIdentity(JsonObject baseline, JsonObject compiled, IReadOnlyList<string> baselineOrder, HashSet<string> rawIds)
+    private static JsonObject PreserveBlockIdentity(JsonObject baseline, JsonObject compiled, IReadOnlyList<string> baselineOrder, HashSet<string> rawIds,
+        ScratchBlockGraph.PreservedScripts preserved)
     {
         Dictionary<string, Queue<string>> baselineByOpcode = new(StringComparer.Ordinal);
         foreach (string id in baselineOrder)
         {
+            if (preserved.OriginalIds.Contains(id)) continue;
             if (baseline[id] is not JsonObject block || NodeString(block["opcode"]) is not string opcode)
             {
                 continue;
@@ -349,11 +406,12 @@ internal static class ScratchProjectMerger
         }
 
         Dictionary<string, string> idMap = new(StringComparer.Ordinal);
-        HashSet<string> reserved = compiled.Where(pair => baseline.ContainsKey(pair.Key)).Select(pair => pair.Key).ToHashSet(StringComparer.Ordinal);
-        foreach (string id in reserved) idMap[id] = id;
+        HashSet<string> reserved = new(preserved.OriginalIds, StringComparer.Ordinal);
+        foreach (string id in compiled.Select(pair => pair.Key).Where(id => !preserved.CompiledIds.Contains(id) && rawIds.Contains(id)))
+        { idMap[id] = id; reserved.Add(id); }
         foreach ((string compiledId, JsonNode? node) in compiled)
         {
-            if (reserved.Contains(compiledId)) continue;
+            if (preserved.CompiledIds.Contains(compiledId) || idMap.ContainsKey(compiledId)) continue;
             if (node is JsonObject block && NodeString(block["opcode"]) is string opcode &&
                 baselineByOpcode.TryGetValue(opcode, out Queue<string>? queue))
             {
@@ -367,11 +425,12 @@ internal static class ScratchProjectMerger
         }
         ScratchIdAllocator allocator = new(reserved);
         foreach (string id in compiled.Select(pair => pair.Key))
-            if (!idMap.ContainsKey(id)) idMap[id] = allocator.Allocate(id);
+            if (!preserved.CompiledIds.Contains(id) && !idMap.ContainsKey(id)) idMap[id] = allocator.Allocate(id);
 
         JsonObject output = [];
         foreach ((string compiledId, JsonNode? node) in compiled)
         {
+            if (preserved.CompiledIds.Contains(compiledId)) continue;
             if (node is not JsonObject source)
             {
                 output[idMap[compiledId]] = node?.DeepClone();
@@ -400,6 +459,7 @@ internal static class ScratchProjectMerger
             output[outputId] = block;
         }
 
+        foreach (string id in preserved.OriginalIds) output[id] = baseline[id]?.DeepClone();
         return output;
     }
 

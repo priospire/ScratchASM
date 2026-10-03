@@ -30,9 +30,54 @@ The `project` directive accepts one quoted `.sb3` filename in the same directory
 
 In the Windows IDE, open an `.sb3`, edit the source, then use **Export .sb3** to build it. **Save** or **Save as** writes the source and companion. Source saved to another directory gets its own companion there. The IDE can reopen these source files with all assets intact.
 
-## Exact Blocks
+## Readable Imports
 
-Import uses normal aliases where compiling those aliases reproduces the block graph. Otherwise, the target uses `rawblocks`, a JSON object keyed by the original Scratch block IDs:
+Standard Scratch blocks become ScratchASM source, regardless of project size:
+
+```scratchasm
+stage {
+  global var score = 0
+  proc add_points(amount: num) as "add points %n":
+    score += amount
+
+  @event.greenflag:
+    repeat 5:
+      call add_points(2)
+    if (score > 5):
+      looks.say "Done"
+}
+```
+
+Dropdowns become values such as `motion.goto "_mouse_"`. Operators become expressions
+such as `(score * 2)` and `sin(score)`. Custom blocks retain their display signature
+with `as` and their run-without-screen-refresh setting with `warp`. Names that cannot
+be identifiers get readable aliases; the companion preserves original display names.
+
+Disconnected stacks and floating reporters are also source:
+
+```scratchasm
+stage {
+  var score = 0
+  stack:
+    score += 1
+  reporter score
+  reporter (score * 2)
+}
+```
+
+`stack:` owns an indented sequence with no event hat. `reporter` takes one reporter
+expression, not a literal. Neither runs automatically on the green flag.
+
+Unchanged exports preserve every archive entry. During edits, unchanged scripts
+retain their original graph, including hidden input shadows, block IDs and comments.
+Edited scripts are recompiled; their source does not expose every Scratch editor
+detail. Assets and project metadata stay in the companion. Third-party blocks with
+no known alias retain generic syntax rather than being guessed or silently removed.
+
+## Advanced Exact Blocks
+
+`rawblocks` remains an explicit escape hatch for manually editing the exact graph.
+It is not the normal import format. Its JSON object is keyed by Scratch block IDs:
 
 ```scratchasm
 stage {
@@ -98,6 +143,10 @@ node tools/runtime-smoke/host-smoke.cjs
 ```
 
 The runtime tests execute `samples/roundtrip.sasm` with the official Scratch VM, including an edited round trip. The fixture tests download nine projects from a pinned revision of [Scratch's upstream fixtures](https://github.com/scratchfoundation/scratch-editor/tree/d4eb4878970a4958020946018669c8e5d255e5fc/packages/scratch-vm/test/fixtures) and check exact and edited round trips. Downloads and generated files stay under `artifacts/`.
+
+`npm --prefix tools/runtime-smoke run test:readable` also executes imported source
+without its companion, then checks edited custom-block bodies and calls with native
+parameter IDs, legacy loop bodies, list operations and disconnected workspace blocks.
 
 Runtime tests run without a renderer: they verify execution, project state, and preserved asset bytes, not visual rendering or audio playback in the Scratch website. Windows tests render light/dark IDE captures at 1240x820 and 900x600 and check document loading, outline population, and undo/redo after highlighting. Manual testing in the main Scratch editor remains useful for visual, sound, and hardware-extension behavior.
 

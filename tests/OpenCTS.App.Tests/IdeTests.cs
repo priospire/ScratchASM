@@ -266,7 +266,8 @@ public sealed class IdeTests
         }
         typeof(MainForm).GetMethod("LoadInputPreview", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(form, [archive]);
         PumpUntil(() => form.Text.Contains("import.sb3", StringComparison.Ordinal) && !editor.ReadOnly);
-        StringAssert.Contains(editor.Text, "rawblocks {");
+        StringAssert.Contains(editor.Text, "proc accumulate(");
+        Assert.IsFalse(editor.Text.Contains("rawblocks", StringComparison.Ordinal));
         Assert.DoesNotContain('*', form.Text);
         string exported = Path.Combine(directory, "exported.sasm");
         ScratchProjectEditSession session = ScratchProjectEditSession.Open(archive);
@@ -358,11 +359,11 @@ public sealed class IdeTests
         form.Show();
         CodeEditor editor = Descendants(form).OfType<CodeEditor>().Single();
         PumpUntil(() => editor.TextLength > 1024 * 1024 && !editor.ReadOnly);
-        int opcode = editor.Text.IndexOf("event_whenflagclicked", StringComparison.Ordinal);
+        int opcode = editor.Text.IndexOf("@event.greenflag", StringComparison.Ordinal);
         editor.Select(opcode, 0); editor.ScrollToCaret();
         PumpUntil(() =>
         {
-            editor.Select(opcode, "event_whenflagclicked".Length);
+            editor.Select(opcode, "@event.greenflag".Length);
             return editor.SelectionColor.ToArgb() == ColorTranslator.FromHtml(ScratchCategoryColors.Events).ToArgb();
         });
         Assert.IsGreaterThan(0, ticks);

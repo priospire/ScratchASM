@@ -12,8 +12,8 @@ checks pause to avoid recompiling the whole project after each edit. Use
 Tools > Check source for a full background check. Edited exports always validate.
 Target navigation and visible-text highlighting remain available.
 Long lists are colored only across the visible columns, not their hidden values.
-Large imported raw graphs use one JSON block per line to keep editor layout small;
-block IDs, properties, and values are preserved.
+Large imports use readable statements instead of expanding blocks into JSON.
+The project companion retains the original graph and assets.
 
 Large archives show a performance warning, not an entry-count error. Assets stay
 in a compressed disk snapshot and load only when needed. Automatic stage preview

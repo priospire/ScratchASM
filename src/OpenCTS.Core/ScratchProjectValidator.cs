@@ -233,6 +233,7 @@ internal static class ScratchProjectValidator
         JsonSourceMap sourceMap,
         List<ValidationIssue> issues)
     {
+        int omittedShadowFlags = 0;
         foreach (JsonProperty blockProperty in blocks.EnumerateObject())
         {
             string blockPath = $"{blocksPath}.{blockProperty.Name}";
@@ -249,9 +250,14 @@ internal static class ScratchProjectValidator
             RequireStringOrNull(block, "parent", blockPath, sourceMap, issues);
             RequireProperty(block, "inputs", JsonValueKind.Object, blockPath, sourceMap, issues, out _);
             RequireProperty(block, "fields", JsonValueKind.Object, blockPath, sourceMap, issues, out _);
-            RequireProperty(block, "shadow", JsonValueKind.True, JsonValueKind.False, blockPath, sourceMap, issues, out _);
+            if (block.TryGetProperty("shadow", out _))
+                RequireProperty(block, "shadow", JsonValueKind.True, JsonValueKind.False, blockPath, sourceMap, issues, out _);
+            else omittedShadowFlags++;
             RequireProperty(block, "topLevel", JsonValueKind.True, JsonValueKind.False, blockPath, sourceMap, issues, out _);
         }
+        if (omittedShadowFlags > 0)
+            issues.Add(new ValidationIssue($"{omittedShadowFlags} block(s) omit the shadow flag; Scratch treats these as non-shadow blocks.",
+                blocksPath, sourceMap.GetLocation(blocksPath), DiagnosticSeverity.Warning, "SASM3002"));
         ScratchGraphValidator.Validate(blocks, blocksPath, sourceMap, issues);
     }
 

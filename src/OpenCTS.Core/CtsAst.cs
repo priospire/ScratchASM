@@ -121,6 +121,10 @@ public sealed record CtsSvgShape(
 
 public abstract record CtsScript(SourceSpan Span);
 
+public sealed record CtsStackScript(IReadOnlyList<CtsStatement> Statements, SourceSpan Span) : CtsScript(Span);
+
+public sealed record CtsReporterScript(CtsValue Value, SourceSpan Span) : CtsScript(Span);
+
 public sealed record CtsHatScript(
     string HatName,
     string? HatArgument,

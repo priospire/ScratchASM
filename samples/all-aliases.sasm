@@ -340,7 +340,8 @@ sprite "Alias Sprite" {
 
   proc alias_sample_059():
     # alias legacy.control.allatonce/0
-    legacy.control.allatonce
+    legacy.control.allatonce:
+      call consume(1)
 
   proc alias_sample_060():
     # alias legacy.control.clearcounter/0
@@ -352,7 +353,8 @@ sprite "Alias Sprite" {
 
   proc alias_sample_062():
     # alias legacy.control.foreach/2
-    legacy.control.foreach score 1
+    legacy.control.foreach score 1:
+      call consume(1)
 
   proc alias_sample_063():
     # alias legacy.control.incrcounter/0
@@ -360,7 +362,8 @@ sprite "Alias Sprite" {
 
   proc alias_sample_064():
     # alias legacy.control.while/1
-    legacy.control.while 1
+    legacy.control.while 1:
+      call consume(1)
 
   # alias legacy.event.touching/1
   @legacy.event.touching 1:

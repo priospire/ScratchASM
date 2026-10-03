@@ -1,7 +1,7 @@
 {
   "name": "scratchasm-runtime-smoke",
   "private": true,
-  "scripts": { "test": "node smoke.cjs", "test:fixtures": "node fixtures.cjs" },
+  "scripts": { "test": "node smoke.cjs", "test:fixtures": "node fixtures.cjs", "test:readable": "node readable-import.cjs" },
   "dependencies": {
     "@scratch/scratch-vm": "15.1.1",
     "scratch-storage": "6.2.1",

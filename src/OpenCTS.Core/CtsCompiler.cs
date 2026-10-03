@@ -202,6 +202,15 @@ public static class CtsCompiler
             {
                 switch (script)
                 {
+                    case CtsStackScript stack:
+                        SetWorkspaceRoot(CompileStack(stack.Statements, "", null), scriptIndex);
+                        break;
+                    case CtsReporterScript reporter:
+                        JsonArray input = BuildInput(null, reporter.Value, "", null);
+                        if (input[1] is JsonValue root && root.TryGetValue<string>(out string? rootId))
+                            SetWorkspaceRoot(rootId, scriptIndex);
+                        else AddError("CTS1032", "A workspace reporter must be a variable or reporter expression, not a literal.", reporter.Span);
+                        break;
                     case CtsHatScript hat:
                         CompileHatScript(hat, scriptIndex);
                         break;
@@ -486,6 +495,16 @@ public static class CtsCompiler
                 null);
             string? firstStatement = CompileStack(script.Statements, hatId, null);
             SetNext(hatId, firstStatement);
+        }
+
+        private void SetWorkspaceRoot(string? id, int scriptIndex)
+        {
+            if (id is null || _currentBlocks[id] is not JsonObject block) return;
+            block["parent"] = null;
+            block["topLevel"] = true;
+            block["shadow"] = false;
+            block["x"] = 48;
+            block["y"] = 48 + scriptIndex * 136;
         }
 
         private void CompileProcedureDefinition(CtsProcedureDefinition procedure, int scriptIndex)

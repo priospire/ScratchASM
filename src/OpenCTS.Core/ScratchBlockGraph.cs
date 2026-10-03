@@ -1,76 +1,82 @@
-using System.Globalization;
-using System.Text.Json;
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json.Nodes;
 
 namespace OpenCTS.Core;
 
 internal static class ScratchBlockGraph
 {
-    public static bool Equivalent(JsonObject original, JsonObject compiled, ScratchTargetOrigin origin,
-        IEnumerable<ScratchTargetOrigin> allOrigins)
+    internal sealed record PreservedScripts(HashSet<string> OriginalIds, HashSet<string> CompiledIds);
+
+    // Compare compilations of source, not native JSON representations. The companion
+    // retains hidden shadows, parameter IDs and workspace metadata for unchanged scripts.
+    public static PreservedScripts FindUnchangedScripts(JsonObject original, JsonObject baseline, JsonObject edited,
+        IReadOnlyList<string> originalRoots, HashSet<string> rawIds)
     {
-        Dictionary<string, string> originalNames = allOrigins.SelectMany(target =>
-            target.Variables.Values.Concat(target.Lists.Values).Concat(target.Broadcasts.Values))
-            .GroupBy(data => data.Id).ToDictionary(group => group.Key, group => group.First().Alias);
-        Dictionary<string, string> compiledNames = new(StringComparer.Ordinal);
-        foreach (string kind in new[] { "variables", "lists", "broadcasts" })
+        PreservedScripts result = new([], []);
+        string[] roots = Roots(baseline).ToArray();
+        if (roots.Length != originalRoots.Count) return result;
+        Dictionary<string, Queue<string>> matches = new(StringComparer.Ordinal);
+        for (int index = 0; index < roots.Length; index++)
         {
-            foreach ((string id, JsonNode? value) in compiled[kind] as JsonObject ?? [])
-                compiledNames[id] = value is JsonArray tuple ? Text(tuple[0]) : Text(value);
+            string signature = Signature(baseline, roots[index]);
+            if (!matches.TryGetValue(signature, out Queue<string>? candidates)) matches[signature] = candidates = new();
+            candidates.Enqueue(originalRoots[index]);
         }
-        // Generated global IDs used by sprites are resolved by their display names below.
-        return Signature(original["blocks"] as JsonObject ?? [], originalNames) ==
-            Signature(compiled["blocks"] as JsonObject ?? [], compiledNames);
+        foreach (string root in Roots(edited))
+        {
+            if (rawIds.Contains(root)) continue;
+            if (!matches.TryGetValue(Signature(edited, root), out Queue<string>? candidates) || !candidates.TryDequeue(out string? previous)) continue;
+            result.OriginalIds.UnionWith(Component(original, previous));
+            result.CompiledIds.UnionWith(Component(edited, root));
+        }
+        return result;
     }
 
-    private static string Signature(JsonObject blocks, IReadOnlyDictionary<string, string> names)
+    private static IEnumerable<string> Roots(JsonObject blocks) => blocks.Where(pair =>
+        pair.Value is JsonArray || pair.Value is JsonObject block && block["topLevel"]?.ToString() == "true").Select(pair => pair.Key);
+
+    internal static string[] Component(JsonObject blocks, string root)
     {
-        if (blocks.Any(pair => pair.Value is not JsonObject)) return "primitive-workspace";
         HashSet<string> seen = new(StringComparer.Ordinal);
-        JsonArray roots = [];
-        foreach ((string id, JsonNode? node) in blocks.Where(pair => (pair.Value as JsonObject)?["topLevel"]?.ToString() == "true")
-            .OrderBy(pair => Number(pair.Value?["y"])).ThenBy(pair => Number(pair.Value?["x"])))
+        List<string> order = [];
+        Stack<string> pending = new();
+        pending.Push(root);
+        while (pending.TryPop(out string? id))
         {
-            roots.Add(Block(id, 0));
+            if (!blocks.ContainsKey(id) || !seen.Add(id)) continue;
+            order.Add(id);
+            if (blocks[id] is not JsonObject block) continue;
+            if (block["next"] is JsonValue next && next.TryGetValue<string>(out string? nextId)) pending.Push(nextId);
+            foreach ((string _, JsonNode? value) in (block["inputs"] as JsonObject ?? []).OrderBy(pair => pair.Key, StringComparer.Ordinal))
+                if (value is JsonArray input)
+                    foreach (JsonNode? part in input.Skip(1).Take(2))
+                        if (part is JsonValue reference && reference.TryGetValue<string>(out string? child)) pending.Push(child);
         }
-        return seen.Count == blocks.Count ? roots.ToJsonString() : "unreachable:" + blocks.ToJsonString();
-
-        JsonNode? Block(string id, int depth)
-        {
-            if (depth > 128 || !seen.Add(id) || blocks[id] is not JsonObject block)
-                return JsonValue.Create("invalid:" + id);
-            JsonObject result = new() { ["opcode"] = block["opcode"]?.DeepClone() };
-            JsonObject fields = [];
-            foreach ((string key, JsonNode? value) in (block["fields"] as JsonObject ?? []).OrderBy(pair => pair.Key, StringComparer.Ordinal))
-            {
-                if (value is JsonArray field && field.Count > 0)
-                    fields[key] = field.Count > 1 && field[1] is not null
-                        ? names.GetValueOrDefault(Text(field[1]), Text(field[0])) : Text(field[0]);
-            }
-            result["fields"] = fields;
-            JsonObject inputs = [];
-            foreach ((string key, JsonNode? value) in (block["inputs"] as JsonObject ?? []).OrderBy(pair => pair.Key, StringComparer.Ordinal))
-            {
-                if (value is not JsonArray input) return JsonValue.Create("invalid-input");
-                JsonArray normalized = [];
-                foreach (JsonNode? part in input)
-                {
-                    if (part is JsonValue scalar && scalar.TryGetValue(out string? reference))
-                        normalized.Add(Block(reference!, depth + 1));
-                    else if (part is JsonArray primitive && primitive.Count >= 3 && Number(primitive[0]) is 11 or 12 or 13)
-                        normalized.Add(new JsonArray(primitive[0]?.DeepClone(), JsonValue.Create(names.GetValueOrDefault(Text(primitive[2]), Text(primitive[1])))));
-                    else
-                        normalized.Add(part?.DeepClone());
-                }
-                inputs[key] = normalized;
-            }
-            result["inputs"] = inputs;
-            if (block["mutation"] is not null) result["mutation"] = block["mutation"]!.DeepClone();
-            result["next"] = block["next"] is JsonValue next ? Block(Text(next), depth + 1) : null;
-            return result;
-        }
+        return order.ToArray();
     }
 
-    private static string Text(JsonNode? value) => value?.ToString() ?? "";
-    private static double Number(JsonNode? value) => double.TryParse(Text(value), CultureInfo.InvariantCulture, out double number) ? number : 0;
+    private static string Signature(JsonObject blocks, string root)
+    {
+        string[] ids = Component(blocks, root);
+        Dictionary<string, int> positions = ids.Select((id, index) => (id, index)).ToDictionary(item => item.id, item => item.index, StringComparer.Ordinal);
+        using IncrementalHash hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
+        foreach (string id in ids)
+        {
+            JsonNode? node = blocks[id]?.DeepClone();
+            if (node is JsonObject block)
+            {
+                block.Remove("x"); block.Remove("y");
+                foreach (string property in new[] { "next", "parent" })
+                    if (block[property] is JsonValue link && link.TryGetValue<string>(out string? reference) && positions.TryGetValue(reference, out int index))
+                        block[property] = index;
+                foreach (JsonArray input in (block["inputs"] as JsonObject ?? []).Select(pair => pair.Value).OfType<JsonArray>())
+                    for (int i = 1; i < Math.Min(input.Count, 3); i++)
+                        if (input[i] is JsonValue link && link.TryGetValue<string>(out string? reference) && positions.TryGetValue(reference, out int index))
+                            input[i] = index;
+            }
+            hash.AppendData(Encoding.UTF8.GetBytes((node?.ToJsonString() ?? "null") + "\n"));
+        }
+        return Convert.ToHexString(hash.GetHashAndReset());
+    }
 }

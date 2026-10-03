@@ -26,7 +26,7 @@ public static class CtsLexer
     {
         "stage",
         "project",
-        "rawblocks",
+        "rawblocks", "stack", "reporter",
         "origin",
         "sprite",
         "const",

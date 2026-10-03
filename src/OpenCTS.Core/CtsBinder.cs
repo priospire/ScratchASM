@@ -178,6 +178,8 @@ public static class CtsBinder
         {
             return script switch
             {
+                CtsStackScript stack => stack with { Statements = BindStatements(stack.Statements, instances, inProcedure: false) },
+                CtsReporterScript reporter => reporter with { Value = RewriteValue(reporter.Value, instances) },
                 CtsHatScript hat => hat with { Statements = BindStatements(hat.Statements, instances, inProcedure: false) },
                 CtsGenericHatScript hat => hat with { Statements = BindStatements(hat.Statements, instances, inProcedure: false) },
                 CtsAliasHatScript hat => hat with

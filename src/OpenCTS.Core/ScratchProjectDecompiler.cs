@@ -5,57 +5,39 @@ using System.Text.Json.Nodes;
 
 namespace OpenCTS.Core;
 
-internal sealed class ScratchProjectDecompiler
+internal sealed partial class ScratchProjectDecompiler
 {
     private static readonly HashSet<string> ReservedWords = new(StringComparer.Ordinal)
     {
         "stage", "sprite", "proc", "call", "block", "input", "field", "mutation", "var", "global",
         "sprite", "local", "cloud", "list", "broadcast", "extension", "state", "costume", "struct",
         "enum", "const", "repeat", "forever", "if", "else", "repeatuntil", "waituntil", "substack",
-        "project", "rawblocks", "origin", "true", "false", "and", "or", "not", "as", "warp", "shadow", "num", "str", "bool"
+        "project", "rawblocks", "origin", "stack", "reporter", "true", "false", "and", "or", "not", "as", "warp", "shadow", "num", "str", "bool"
     };
 
     private readonly JsonObject _project;
     private readonly List<ValidationIssue> _issues = [];
     private readonly ScratchAsmOriginMap _originMap = new();
     private readonly Dictionary<string, ScratchDataOrigin> _dataById = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, ScratchDataOrigin> _stageDataById = new(StringComparer.Ordinal);
     private readonly HashSet<string> _usedAliases = new(StringComparer.Ordinal);
-    private readonly HashSet<int> _rawTargets = [];
 
     private ScratchProjectDecompiler(JsonObject project)
     {
         _project = project;
-        if (project["targets"] is JsonArray targets)
-        {
-            for (int index = 0; index < targets.Count; index++)
-                if (targets[index]?["blocks"] is JsonObject blocks &&
-                    (blocks.Count > 100 || blocks.Any(pair => pair.Value is not JsonObject))) _rawTargets.Add(index);
-        }
     }
 
     public static ScratchProjectDecompilation Decompile(JsonObject project)
     {
         ScratchProjectDecompiler decompiler = new(project);
         ScratchProjectDecompilation candidate = decompiler.Run();
-        if (candidate.Issues.Any(issue => issue.Severity == DiagnosticSeverity.Error)) return candidate;
-        JsonArray originalTargets = project["targets"]!.AsArray();
-        if (originalTargets.Select((target, index) => (target, index)).All(item =>
-            decompiler._rawTargets.Contains(item.index) || item.target?["blocks"] is JsonObject { Count: 0 })) return candidate;
-        CtsCompileResult compiled = CtsCompiler.Compile(candidate.SourceText, "import.sasm");
-        JsonArray? compiledTargets = compiled.ProjectJsonBytes.Length > 0
-            ? JsonNode.Parse(compiled.ProjectJsonBytes)?["targets"] as JsonArray : null;
-        HashSet<int> rawTargets = [];
-        for (int i = 0; i < originalTargets.Count; i++)
+        candidate.OriginMap.CompiledBaseline = new Lazy<JsonObject?>(() =>
         {
-            if (decompiler._rawTargets.Contains(i)) continue;
-            if (compiledTargets is null || i >= compiledTargets.Count ||
-                !ScratchBlockGraph.Equivalent(originalTargets[i]!.AsObject(), compiledTargets[i]!.AsObject(),
-                    candidate.OriginMap.Targets[i], candidate.OriginMap.Targets)) rawTargets.Add(i);
-        }
-        if (rawTargets.Count == 0) return candidate;
-        ScratchProjectDecompiler exact = new(project);
-        exact._rawTargets.UnionWith(rawTargets);
-        return exact.Run();
+            CtsCompileResult compiled = CtsCompiler.Compile(candidate.SourceText, "import.sasm");
+            return compiled.Diagnostics.Any(issue => issue.Severity == DiagnosticSeverity.Error) || compiled.ProjectJsonBytes.Length == 0
+                ? null : JsonNode.Parse(compiled.ProjectJsonBytes) as JsonObject;
+        });
+        return candidate;
     }
 
     private ScratchProjectDecompilation Run()
@@ -98,7 +80,11 @@ internal sealed class ScratchProjectDecompiler
 
         source.Append(isStage ? "stage" : $"sprite {Quote(name)}").AppendLine(" {");
         if (!isStage) source.Append("  origin ").AppendLine(Quote(name));
+        _dataById.Clear();
+        foreach ((string id, ScratchDataOrigin data) in _stageDataById) _dataById[id] = data;
         EmitDataDeclarations(source, target, origin, isStage);
+        if (isStage)
+            foreach ((string id, ScratchDataOrigin data) in _dataById) _stageDataById[id] = data;
         EmitState(source, target);
 
         if (isStage)
@@ -121,8 +107,7 @@ internal sealed class ScratchProjectDecompiler
 
         if (target["blocks"] is JsonObject blocks && blocks.Count > 0)
         {
-            if (_rawTargets.Contains(targetIndex)) EmitRawBlocks(source, blocks, origin);
-            else EmitScripts(source, blocks, origin, targetIndex);
+            EmitScripts(source, blocks, origin, targetIndex);
         }
 
         source.AppendLine("}");
@@ -247,6 +232,7 @@ internal sealed class ScratchProjectDecompiler
             EmitRawBlocks(source, blocks, origin);
             return;
         }
+        RegisterProcedures(byId);
         List<string> roots = byId
             .Where(static pair => pair.Value["topLevel"]?.GetValue<bool>() == true)
             .OrderBy(static pair => Number(pair.Value["y"]))
@@ -264,10 +250,18 @@ internal sealed class ScratchProjectDecompiler
 
         foreach (string orphan in byId.Keys.Where(id => !emitted.Contains(id)).Order(StringComparer.Ordinal))
         {
+            if (emitted.Contains(orphan)) continue;
             AddWarning("CTS3005", $"Disconnected block '{orphan}' was emitted as an additional top-level generic script.",
                 $"$.targets[{targetIndex}].blocks.{orphan}");
             source.AppendLine();
             EmitTopLevel(source, byId, orphan, 2, emitted, origin);
+        }
+        foreach ((string id, JsonNode? node) in blocks.Where(pair => pair.Value is JsonArray))
+        {
+            source.AppendLine();
+            AppendIndent(source, 2).Append("reporter ").AppendLine(EmitPrimitive(node));
+            origin.BlockOrder.Add(id);
+            origin.RootOrder.Add(id);
         }
     }
 
@@ -286,7 +280,9 @@ internal sealed class ScratchProjectDecompiler
 
         emitted.Add(id);
         origin.BlockOrder.Add(id);
+        origin.RootOrder.Add(id);
         string opcode = NodeString(block["opcode"]) ?? "unknown_opcode";
+        if (TryEmitReadableRoot(source, blocks, id, block, indent, emitted, origin)) return;
         MarkReporterInputs(block, blocks, emitted, origin);
         if (TryMatchAlias(block, CtsBlockShape.Hat, out CtsAliasDefinition? hat))
         {
@@ -354,6 +350,7 @@ internal sealed class ScratchProjectDecompiler
         HashSet<string> emitted,
         ScratchTargetOrigin origin)
     {
+        if (TryEmitReadableStatement(source, blocks, block, indent, emitted, origin)) return;
         if (TryMatchAlias(block, CtsBlockShape.Stack, CtsBlockShape.Cap, out CtsAliasDefinition? definition) &&
             !HasSubstacks(block))
         {
@@ -427,7 +424,7 @@ internal sealed class ScratchProjectDecompiler
                     continue;
                 }
 
-                result.Append(" input ").Append(name).Append('=').Append(EmitInput(value, blocks));
+                result.Append(" input ").Append(Quote(name)).Append('=').Append(EmitInput(value, blocks));
             }
         }
 
@@ -435,7 +432,7 @@ internal sealed class ScratchProjectDecompiler
         {
             foreach ((string name, JsonNode? value) in fields.OrderBy(static pair => pair.Key, StringComparer.Ordinal))
             {
-                result.Append(" field ").Append(name).Append('=').Append(EmitField(value));
+                result.Append(" field ").Append(Quote(name)).Append('=').Append(EmitField(value));
             }
         }
 
@@ -445,14 +442,14 @@ internal sealed class ScratchProjectDecompiler
                 .Where(static pair => pair.Key is not "tagName" and not "children")
                 .OrderBy(static pair => pair.Key, StringComparer.Ordinal))
             {
-                result.Append(" mutation ").Append(name).Append('=').Append(EmitScalar(value));
+                result.Append(" mutation ").Append(Quote(name)).Append('=').Append(EmitScalar(value));
             }
         }
 
         return result.ToString();
     }
 
-    private string EmitAliasArguments(JsonObject block, CtsAliasDefinition definition, IReadOnlyDictionary<string, JsonObject> blocks)
+    private string EmitAliasArguments(JsonObject block, CtsAliasDefinition definition, IReadOnlyDictionary<string, JsonObject> blocks, string separator = ", ")
     {
         if (definition.Bindings.Count == 0)
         {
@@ -471,12 +468,16 @@ internal sealed class ScratchProjectDecompiler
                 _ => null
             };
 
+            if (binding.Kind == CtsBindingKind.Menu && value is JsonArray menuInput && menuInput.Count > 1 &&
+                NodeString(menuInput[1]) is string menuId && blocks.TryGetValue(menuId, out JsonObject? menu) &&
+                NodeString(menu["opcode"]) == binding.MenuOpcode)
+                value = menu["fields"]?[binding.MenuField ?? binding.Name];
             arguments.Add(binding.Kind is CtsBindingKind.Input or CtsBindingKind.Menu && value is JsonArray input && IsInputTuple(input)
                 ? EmitInput(value, blocks)
                 : EmitFieldArgument(value));
         }
 
-        return " " + string.Join(' ', arguments);
+        return " " + string.Join(separator, arguments);
     }
 
     private string EmitReporter(string id, IReadOnlyDictionary<string, JsonObject> blocks)
@@ -487,6 +488,7 @@ internal sealed class ScratchProjectDecompiler
         }
 
         string opcode = NodeString(block["opcode"]) ?? "unknown_opcode";
+        if (TryEmitReadableReporter(block, blocks, out string? expression)) return expression!;
         if (opcode is "data_variable" or "data_listcontents" &&
             block["fields"] is JsonObject fields)
         {
@@ -494,13 +496,13 @@ internal sealed class ScratchProjectDecompiler
             string? dataId = field is JsonArray tuple && tuple.Count >= 2 ? NodeString(tuple[1]) : null;
             if (dataId is not null && _dataById.TryGetValue(dataId, out ScratchDataOrigin? origin))
             {
-                return origin.Alias;
+                return opcode == "data_listcontents" ? origin.Alias + ".contents()" : origin.Alias;
             }
         }
 
         if (TryMatchAlias(block, CtsBlockShape.Reporter, CtsBlockShape.Boolean, out CtsAliasDefinition? definition))
         {
-            string arguments = EmitAliasArguments(block, definition!, blocks).TrimStart();
+            string arguments = EmitAliasArguments(block, definition!, blocks, ", ").TrimStart();
             return $"{definition!.Name}({arguments})";
         }
 
@@ -510,6 +512,7 @@ internal sealed class ScratchProjectDecompiler
 
     private string EmitInput(JsonNode? node, IReadOnlyDictionary<string, JsonObject> blocks)
     {
+        if (node is null) return "\"\"";
         if (node is not JsonArray input || !IsInputTuple(input) || input.Count < 2)
         {
             return EmitScalar(node);
@@ -538,7 +541,7 @@ internal sealed class ScratchProjectDecompiler
             string? id = NodeString(primitive[2]);
             if (id is not null && _dataById.TryGetValue(id, out ScratchDataOrigin? origin))
             {
-                return origin.Alias;
+                return type == 13 ? origin.Alias + ".contents()" : origin.Alias;
             }
         }
 
@@ -601,20 +604,19 @@ internal sealed class ScratchProjectDecompiler
         JsonObject fields = block["fields"] as JsonObject ?? [];
         JsonObject inputs = block["inputs"] as JsonObject ?? [];
         JsonObject mutation = block["mutation"] as JsonObject ?? [];
-        if (opcode is null || mutation.Count > 0)
+        if (opcode is null || (mutation.Count > 0 && opcode != "control_stop"))
         {
             definition = null;
             return false;
         }
 
-        CtsAliasDefinition[] matches = CtsBlockRegistry.Definitions.Where(candidate =>
-            candidate.Opcode == opcode &&
+        CtsAliasDefinition[] matches = AliasesByOpcode.GetValueOrDefault(opcode, []).Where(candidate =>
             allowedShapes.Contains(candidate.Shape) &&
             candidate.ConstantFields.All(field => FieldDisplay(fields[field.Key]) == field.Value) &&
             candidate.Bindings.All(binding => binding.Kind switch
             {
                 CtsBindingKind.Field => fields.ContainsKey(binding.Name),
-                CtsBindingKind.Input => inputs.ContainsKey(binding.Name),
+                CtsBindingKind.Input => true,
                 CtsBindingKind.Menu => fields.ContainsKey(binding.Name) || inputs.ContainsKey(binding.Name),
                 _ => false
             }) &&
@@ -624,7 +626,8 @@ internal sealed class ScratchProjectDecompiler
                 candidate.Bindings.Any(binding => binding.Name == input.Key)))
             .ToArray();
 
-        definition = matches.Length == 1 ? matches[0] : null;
+        definition = matches.OrderByDescending(candidate => candidate.ConstantFields.Count)
+            .ThenBy(candidate => candidate.IsLegacy).FirstOrDefault();
         return definition is not null;
     }
 
@@ -633,48 +636,45 @@ internal sealed class ScratchProjectDecompiler
         Dictionary<string, string> owners = new(StringComparer.Ordinal);
         HashSet<string> visiting = new(StringComparer.Ordinal);
         HashSet<string> visited = new(StringComparer.Ordinal);
+        Stack<(string Id, string? Owner, int Depth, bool Exit)> pending = [];
         foreach (string root in blocks.Keys)
         {
-            if (!visited.Contains(root)) Visit(root, null, 0);
-        }
-
-        void Visit(string id, string? owner, int depth)
-        {
-            if (depth > 128)
+            if (visited.Contains(root)) continue;
+            pending.Push((root, null, 0, false));
+            while (pending.TryPop(out var item))
             {
-                AddError("CTS3009", "Block graph nesting exceeds the supported limit of 128.", $"$.targets[{targetIndex}].blocks");
-                return;
-            }
-            if (!blocks.TryGetValue(id, out JsonObject? block))
-            {
-                AddError("CTS3007", $"Block graph references missing block '{id}'.", $"$.targets[{targetIndex}].blocks");
-                return;
-            }
-
-            if (owner is not null && owners.TryGetValue(id, out string? priorOwner) && priorOwner != owner)
-            {
-                AddError("CTS3008", $"Block '{id}' is shared by multiple graph parents.", $"$.targets[{targetIndex}].blocks.{id}");
-            }
-            else if (owner is not null)
-            {
-                owners[id] = owner;
-            }
-
-            if (!visiting.Add(id))
-            {
-                AddError("CTS3009", $"Block graph contains a cycle at '{id}'.", $"$.targets[{targetIndex}].blocks.{id}");
-                return;
-            }
-
-            if (visited.Add(id))
-            {
-                foreach (string child in References(block, blocks))
+                (string id, string? owner, int depth, bool exit) = item;
+                if (exit) { visiting.Remove(id); continue; }
+                if (depth > 128)
                 {
-                    Visit(child, id, depth + 1);
+                    AddError("CTS3009", "Block graph nesting exceeds the supported limit of 128.", $"$.targets[{targetIndex}].blocks");
+                    return;
+                }
+                if (!blocks.TryGetValue(id, out JsonObject? block))
+                {
+                    AddError("CTS3007", $"Block graph references missing block '{id}'.", $"$.targets[{targetIndex}].blocks");
+                    return;
+                }
+                if (owner is not null && owners.TryGetValue(id, out string? priorOwner) && priorOwner != owner)
+                {
+                    AddError("CTS3008", $"Block '{id}' is shared by multiple graph parents.", $"$.targets[{targetIndex}].blocks.{id}");
+                    return;
+                }
+                if (owner is not null) owners[id] = owner;
+                if (visiting.Contains(id))
+                {
+                    AddError("CTS3009", $"Block graph contains a cycle at '{id}'.", $"$.targets[{targetIndex}].blocks.{id}");
+                    return;
+                }
+                if (!visited.Add(id)) continue;
+                visiting.Add(id);
+                pending.Push((id, owner, depth, true));
+                if (NodeString(block["next"]) is string next) pending.Push((next, id, depth, false));
+                foreach (string child in InputBlockIds(block).Distinct(StringComparer.Ordinal))
+                {
+                    pending.Push((child, id, depth + 1, false));
                 }
             }
-
-            visiting.Remove(id);
         }
     }
 
@@ -816,7 +816,8 @@ internal sealed class ScratchProjectDecompiler
 
     private static string NumericOrQuoted(string value)
     {
-        return double.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out double number) && double.IsFinite(number)
+        return value.Length > 0 && char.IsAsciiDigit(value[0]) && value == value.Trim() &&
+            double.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out double number) && double.IsFinite(number)
             ? value
             : Quote(value);
     }

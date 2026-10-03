@@ -6,7 +6,7 @@ ScratchASM compiles to Scratch 3 `project.json`, validates the generated project
 
 The minimal forms are `score = 5`, `score += 3`, `repeat 10:`, `forever:`, category commands such as `motion.move 10`, and expressions such as `(score + 2) * 3`. Generic Scratch opcode syntax remains available for exact interoperability.
 
-For importing existing projects, the complete specification of `project`, `origin`, and `rawblocks`, companion assets, and preservation rules is in [Scratch project round trips](round-trips.md). These forms extend the declarations below and are supported by the IDE, CLI, and language services. Standard JSON string escapes, including `\uXXXX`, and scientific-notation numbers such as `1e-4` are accepted.
+For importing existing projects, the complete specification of `project`, `origin`, `stack:`, `reporter`, and the advanced `rawblocks` escape hatch is in [Scratch project round trips](round-trips.md). Imports use ordinary ScratchASM source; assets and exact unchanged graphs stay in a companion archive. These forms are supported by the IDE, CLI, and language services. Standard JSON string escapes, including `\uXXXX`, and scientific-notation numbers such as `1e-4` are accepted.
 
 ## Complete Alias Set
 
@@ -114,9 +114,9 @@ This table is the compiler's complete native alias catalog. Arguments marked `In
 | `control.clone` | `control_start_as_clone` | Hat | none | - |
 | `control.createclone` | `control_create_clone_of` | Stack | `CLONE_OPTION` Menu | - |
 | `control.deleteclone` | `control_delete_this_clone` | Cap | none | AlwaysCaps |
-| `legacy.control.while` | `control_while` | Stack | `CONDITION` Input | legacy |
-| `legacy.control.foreach` | `control_for_each` | Stack | `VARIABLE` Field, `VALUE` Input | legacy |
-| `legacy.control.allatonce` | `control_all_at_once` | Stack | none | legacy |
+| `legacy.control.while` | `control_while` | CBlock | `CONDITION` Input | legacy |
+| `legacy.control.foreach` | `control_for_each` | CBlock | `VARIABLE` Field, `VALUE` Input | legacy |
+| `legacy.control.allatonce` | `control_all_at_once` | CBlock | none | legacy |
 | `legacy.control.counter` | `control_get_counter` | Reporter | none | legacy |
 | `legacy.control.incrcounter` | `control_incr_counter` | Stack | none | legacy |
 | `legacy.control.clearcounter` | `control_clear_counter` | Stack | none | legacy |

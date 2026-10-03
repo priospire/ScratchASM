@@ -182,7 +182,7 @@
       "patterns": [
         {
           "name": "keyword.other.raw.scratchasm",
-          "match": "\\b(?:block|rawblocks|project|origin|stage|sprite|input|field|mutation)\\b"
+          "match": "\\b(?:block|rawblocks|project|origin|stack|reporter|stage|sprite|input|field|mutation)\\b"
         }
       ]
     },

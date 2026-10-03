@@ -68,8 +68,8 @@ sprite "Player" {
             sprite["draggable"] = true;
         });
         ScratchProjectEditSession session = ScratchProjectEditSession.Open(input);
-        string edited = session.SourceText.Replace("data.change global_score 2", "data.change global_score 9", StringComparison.Ordinal);
-        if (edited == session.SourceText) edited += "\n# edited\n";
+        string edited = session.SourceText.Replace("global_score += 2", "global_score += 9", StringComparison.Ordinal);
+        Assert.AreNotEqual(session.SourceText, edited);
         string output = Path.Combine(_directory, "edited.sb3");
         AssertSuccess(session.WriteEdited(edited, output));
         JsonNode project = JsonNode.Parse(ReadArchive(output)["project.json"])!;
@@ -100,7 +100,9 @@ stage {
             new JsonArray(12, "value", "stage_var_value", 41, 52));
         ScratchProjectEditSession session = ScratchProjectEditSession.Open(input);
         Assert.IsTrue(session.CanEdit, string.Join(";", session.Issues));
-        StringAssert.Contains(session.SourceText, "rawblocks {");
+        StringAssert.Contains(session.SourceText, "proc add(");
+        StringAssert.Contains(session.SourceText, "reporter value");
+        Assert.IsFalse(session.SourceText.Contains("rawblocks", StringComparison.Ordinal));
         string output = Path.Combine(_directory, "edited.sb3");
         AssertSuccess(session.WriteEdited(session.SourceText + "\n# edit\n", output));
         JsonNode original = JsonNode.Parse(ReadArchive(input)["project.json"])!;
@@ -194,15 +196,15 @@ stage {
     [TestMethod]
     public void RawBlockWorkspaceCoordinatesRemainEditable()
     {
-        string input = MakeProject("stage {\n  var value = 0\n  proc example():\n    value += 1\n}\n");
+        string input = MakeProject("stage {\n  rawblocks {\"loose\": {\"opcode\": \"looks_show\", \"next\": null, \"parent\": null, \"inputs\": {}, \"fields\": {}, \"shadow\": false, \"topLevel\": true, \"x\": 320, \"y\": 48}}\n}\n");
         ScratchProjectEditSession session = ScratchProjectEditSession.Open(input);
-        string edited = session.SourceText.Replace("\"x\": 320", "\"x\": 999", StringComparison.Ordinal);
+        string edited = "stage {\n  rawblocks {\"loose\": {\"opcode\": \"looks_show\", \"next\": null, \"parent\": null, \"inputs\": {}, \"fields\": {}, \"shadow\": false, \"topLevel\": true, \"x\": 999, \"y\": 48}}\n}\n";
         Assert.AreNotEqual(session.SourceText, edited);
         string output = Path.Combine(_directory, "layout.sb3");
         AssertSuccess(session.WriteEdited(edited, output));
         JsonNode project = JsonNode.Parse(ReadArchive(output)["project.json"])!;
         JsonObject definition = project["targets"]![0]!["blocks"]!.AsObject().Select(pair => pair.Value).OfType<JsonObject>()
-            .Single(block => block["opcode"]!.GetValue<string>() == "procedures_definition");
+            .Single(block => block["opcode"]!.GetValue<string>() == "looks_show");
         Assert.AreEqual(999, definition["x"]!.GetValue<int>());
     }
 

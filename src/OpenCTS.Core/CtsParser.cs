@@ -422,13 +422,32 @@ public static class CtsParser
             int indent = CountIndent(content);
             int startColumn = FirstNonWhitespaceColumn(content);
 
-            if (TryParseTargetMember(lines, ref index, indent, startColumn, diagnostics, out CtsTargetMember? member))
+            if (trimmed != "stack:" && !StartsWithWord(trimmed, "reporter") &&
+                TryParseTargetMember(lines, ref index, indent, startColumn, diagnostics, out CtsTargetMember? member))
             {
                 if (member is not null)
                 {
                     members.Add(member);
                 }
 
+                continue;
+            }
+
+            if (trimmed == "stack:")
+            {
+                SourceSpan span = Span(line.LineNumber, startColumn, startColumn + trimmed.Length);
+                index++;
+                scripts.Add(new CtsStackScript(ParseStatementBlock(lines, ref index, indent, diagnostics), span));
+                continue;
+            }
+
+            if (StartsWithWord(trimmed, "reporter"))
+            {
+                SourceSpan span = Span(line.LineNumber, startColumn, startColumn + trimmed.Length);
+                List<CtsValue> values = ParseExpressions(trimmed[8..], line.LineNumber, startColumn + 8, diagnostics);
+                if (values.Count == 1) scripts.Add(new CtsReporterScript(values[0], span));
+                else AddError(diagnostics, "Expected one expression after 'reporter'.", span);
+                index++;
                 continue;
             }
 
@@ -1504,10 +1523,9 @@ public static class CtsParser
         }
 
         string header = trimmed[..^1].TrimEnd();
-        return StartsWithWord(header, "repeat") ||
-            string.Equals(header, "forever", StringComparison.Ordinal) ||
-            StartsWithWord(header, "if") ||
-            StartsWithWord(header, "repeatuntil");
+        int separator = header.IndexOfAny([' ', '\t']);
+        string command = separator < 0 ? header : header[..separator];
+        return CtsBlockRegistry.Definitions.Any(definition => definition.Shape == CtsBlockShape.CBlock && definition.Name == command);
     }
 
     private static CtsStructuredStatement? ParseStructuredStatement(
@@ -1990,7 +2008,7 @@ public static class CtsParser
             }
 
             scanner.SkipWhitespace();
-            string? name = scanner.ReadIdentifier();
+            string? name = scanner.Peek() == '"' ? (scanner.ReadValue(diagnostics) as CtsStringValue)?.Text : scanner.ReadIdentifier();
             if (name is null)
             {
                 AddError(diagnostics, "Expected a raw clause name.", scanner.PointSpan());
@@ -2009,7 +2027,7 @@ public static class CtsParser
             {
                 case "input":
                 {
-                    CtsValue? value = scanner.ReadValue(diagnostics);
+                    CtsValue? value = scanner.ReadInputExpression(diagnostics);
                     if (value is not null)
                     {
                         inputs.Add(new CtsRawInput(name, value));
@@ -2374,6 +2392,8 @@ public static class CtsParser
             return values;
         }
 
+        public (CtsValue? Value, int Length) ParseOne() => (ParseOr(), _index);
+
         private CtsValue? ParseOr()
         {
             CtsValue? left = ParseAnd();
@@ -2585,7 +2605,7 @@ public static class CtsParser
                 return ReadString();
             }
 
-            if (char.IsDigit(_text[_index]) || (_text[_index] == '.' && _index + 1 < _text.Length && char.IsDigit(_text[_index + 1])))
+            if (char.IsDigit(_text[_index]) || (_text[_index] is '.' or '+' && _index + 1 < _text.Length && char.IsDigit(_text[_index + 1])))
             {
                 return ReadNumber();
             }
@@ -2681,6 +2701,7 @@ public static class CtsParser
         private CtsNumberValue ReadNumber()
         {
             int start = _index;
+            if (_text[_index] == '+') _index++;
             while (!End && char.IsDigit(_text[_index]))
             {
                 _index++;
@@ -2935,6 +2956,19 @@ public static class CtsParser
 
             AddError(diagnostics, "Expected a value.", PointSpan());
             return null;
+        }
+
+        public CtsValue? ReadInputExpression(List<CtsDiagnostic> diagnostics)
+        {
+            CtsExpressionParser parser = new(_text[_index..], _line, _baseColumn + _index, diagnostics);
+            (CtsValue? value, int length) = parser.ParseOne();
+            _index += length;
+            if (value is CtsUnaryValue { Operator: "-", Operand: CtsNumberValue number } unary)
+            {
+                return new CtsNumberValue(-number.Number, "-" + number.Text.TrimStart('+'), unary.Span);
+            }
+
+            return value;
         }
 
         public CtsValue? ReadExpression(List<CtsDiagnostic> diagnostics)
